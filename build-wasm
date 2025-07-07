@@ -3,13 +3,13 @@ set -e
 
 echo "Building WASM package..."
 
-# Build for web (ES modules)
+# Build for web (ES modules) with size optimization
 wasm-pack build --out-dir dist/pkg-web --target web --features wasm
 
-# Build for Node.js
+# Build for Node.js with size optimization
 wasm-pack build --out-dir dist/pkg-node --target nodejs --features wasm
 
-# Build for bundlers (webpack, etc.)
+# Build for bundlers (webpack, etc.) with size optimization
 wasm-pack build --out-dir dist/pkg --target bundler --features wasm
 
 echo "WASM build complete!"

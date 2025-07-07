@@ -1,9 +1,13 @@
 use crate::ast::{Expression, RuleContent, Table};
 use crate::parse;
-use rand::distributions::WeightedIndex;
-use rand::prelude::*;
-use std::collections::HashMap;
+use rand::rngs::SmallRng;
+use rand::{Rng, SeedableRng};
 use thiserror::Error;
+
+#[cfg(feature = "wasm")]
+type HashMapType<K, V> = std::collections::HashMap<K, V, ahash::RandomState>;
+#[cfg(not(feature = "wasm"))]
+type HashMapType<K, V> = std::collections::HashMap<K, V>;
 
 /// Errors that can occur during collection generation
 #[derive(Error, Debug)]
@@ -38,9 +42,8 @@ pub type CollectionGenResult = CollectionResult<String>;
 /// A collection of tables that can generate random content
 #[derive(Debug)]
 pub struct Collection {
-    tables: HashMap<String, Table>,
-    distributions: HashMap<String, WeightedIndex<f64>>,
-    rng: ThreadRng,
+    tables: HashMapType<String, Table>,
+    rng: SmallRng,
     table_order: Vec<String>, // Preserve the order tables appear in source
 }
 
@@ -49,8 +52,10 @@ impl Collection {
     pub fn new(source: &str) -> CollectionResult<Self> {
         let program = parse(source).map_err(|e| CollectionError::ParseError(format!("{}", e)))?;
 
-        let mut tables = HashMap::new();
-        let mut distributions = HashMap::new();
+        #[cfg(feature = "wasm")]
+        let mut tables = HashMapType::with_hasher(ahash::RandomState::new());
+        #[cfg(not(feature = "wasm"))]
+        let mut tables = HashMapType::default();
         let mut table_order = Vec::new();
 
         // First pass: collect all tables and preserve order
@@ -69,19 +74,9 @@ impl Collection {
         // Second pass: validate all table references
         Self::validate_table_references(&tables)?;
 
-        // Third pass: create distributions
-        for (table_id, table) in &tables {
-            let weights: Vec<f64> = table.rules.iter().map(|rule| rule.value.weight).collect();
-
-            let distribution = WeightedIndex::new(&weights)
-                .map_err(|e| CollectionError::GenerationError(format!("Invalid weights: {}", e)))?;
-            distributions.insert(table_id.clone(), distribution);
-        }
-
         Ok(Self {
             tables,
-            distributions,
-            rng: thread_rng(),
+            rng: SmallRng::seed_from_u64(rand::random::<u64>()), // Use random seed
             table_order,
         })
     }
@@ -107,24 +102,23 @@ impl Collection {
                 .get(table_id)
                 .ok_or_else(|| CollectionError::TableNotFound(table_id.to_string()))?;
 
-            let distribution = self
-                .distributions
-                .get(table_id)
-                .ok_or_else(|| CollectionError::TableNotFound(table_id.to_string()))?;
+            // Simple random selection based on cumulative weights
+            let total_weight: f64 = table.rules.iter().map(|r| r.value.weight).sum();
+            let random_value: f64 = self.rng.gen_range(0.0..total_weight);
 
-            // Sample a rule using the weighted distribution
-            let rule_index = distribution.sample(&mut self.rng);
+            let mut cumulative_weight = 0.0;
+            let mut selected_rule = &table.rules[0];
 
-            if rule_index >= table.rules.len() {
-                return Err(CollectionError::GenerationError(
-                    "Invalid rule index".to_string(),
-                ));
+            for rule in &table.rules {
+                cumulative_weight += rule.value.weight;
+                if random_value <= cumulative_weight {
+                    selected_rule = rule;
+                    break;
+                }
             }
 
-            let rule = &table.rules[rule_index].value;
-
             // Clone the content so we don't hold a reference to self
-            rule.content.clone()
+            selected_rule.value.content.clone()
         };
 
         // Process the rule content
@@ -135,15 +129,18 @@ impl Collection {
                 RuleContent::Text(text) => {
                     result.push_str(text);
                 }
-                RuleContent::Expression(Expression::TableReference { table_id: ref_id, modifiers }) => {
+                RuleContent::Expression(Expression::TableReference {
+                    table_id: ref_id,
+                    modifiers,
+                }) => {
                     // Recursively generate from the referenced table
                     let mut generated = self.generate_single(ref_id)?;
-                    
+
                     // Apply modifiers
                     for modifier in modifiers {
                         generated = self.apply_modifier(&generated, modifier);
                     }
-                    
+
                     result.push_str(&generated);
                 }
                 RuleContent::Expression(Expression::DiceRoll { count, sides }) => {
@@ -174,8 +171,18 @@ impl Collection {
             "uppercase" => text.to_uppercase(),
             "lowercase" => text.to_lowercase(),
             "indefinite" => {
-                let first_char = text.chars().next().unwrap_or(' ').to_lowercase().next().unwrap_or(' ');
-                let article = if "aeiou".contains(first_char) { "an" } else { "a" };
+                let first_char = text
+                    .chars()
+                    .next()
+                    .unwrap_or(' ')
+                    .to_lowercase()
+                    .next()
+                    .unwrap_or(' ');
+                let article = if "aeiou".contains(first_char) {
+                    "an"
+                } else {
+                    "a"
+                };
                 format!("{} {}", article, text)
             }
             "definite" => format!("the {}", text),
@@ -184,7 +191,7 @@ impl Collection {
     }
 
     /// Validate that all table references point to existing tables
-    fn validate_table_references(tables: &HashMap<String, Table>) -> CollectionResult<()> {
+    fn validate_table_references(tables: &HashMapType<String, Table>) -> CollectionResult<()> {
         for (table_id, table) in tables {
             for rule in &table.rules {
                 for content in &rule.value.content {

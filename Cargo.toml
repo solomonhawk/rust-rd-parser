@@ -13,14 +13,15 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 thiserror = "1.0"
 log = "0.4"
-rand = "0.8"
+rand = { version = "0.8", features = ["small_rng", "std_rng"] }
 serde = { version = "1.0", features = ["derive"], optional = true }
 serde_json = { version = "1.0", optional = true }
 wasm-bindgen = { version = "0.2", optional = true }
 js-sys = { version = "0.3", optional = true }
-wee_alloc = { version = "0.4", optional = true }
 console_error_panic_hook = { version = "0.1", optional = true }
 getrandom = { version = "0.2", features = ["js"], optional = true }
+# Smaller hash algorithm for reduced WASM size
+ahash = { version = "0.8", optional = true, default-features = false }
 
 [dev-dependencies]
 pretty_assertions = "1.4"
@@ -32,8 +33,30 @@ serde = ["dep:serde", "dep:serde_json"]
 wasm = [
   "dep:wasm-bindgen",
   "dep:js-sys",
-  "dep:wee_alloc",
   "dep:console_error_panic_hook",
   "dep:getrandom",
+  "dep:ahash",
   "serde",
 ]
+
+[profile.release]
+# Optimize for size (z) instead of speed for WASM builds
+opt-level = "z"
+# Link-time optimization for smaller binaries
+lto = "fat"
+# Use fewer code generation units for better optimization
+codegen-units = 1
+# Enable panic=abort to reduce size (can't catch panics in WASM anyway)
+panic = "abort"
+# Strip symbols for smaller size
+strip = "symbols"
+
+# Specific profile for WASM builds focused on size
+[profile.wasm-release]
+inherits = "release"
+# Even more aggressive size optimization
+opt-level = "z"
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = "symbols"

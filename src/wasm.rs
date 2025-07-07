@@ -10,10 +10,6 @@ pub fn set_panic_hook() {
     console_error_panic_hook::set_once();
 }
 
-// Use wee_alloc as the global allocator for smaller binary size
-#[global_allocator]
-static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
-
 /// A WASM-compatible wrapper around the TBL parser
 #[wasm_bindgen]
 pub struct WasmParser;
