@@ -1,6 +1,8 @@
 import Editor, { useMonaco } from "@monaco-editor/react";
 import * as monaco from "monaco-editor";
 import { useEffect, useRef, useState, useCallback } from "react";
+import JsonView from "@uiw/react-json-view";
+import { githubDarkTheme } from "@uiw/react-json-view/githubDark";
 import "./App.css";
 import { registerTblLanguage } from "./tbl-language";
 import { useTblWorker, type TblDiagnostic } from "./useTblWorker";
@@ -15,17 +17,35 @@ function App() {
   const [generatedContent, setGeneratedContent] = useState<string>("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [showOnlyExported, setShowOnlyExported] = useState(false);
+  const [activeTab, setActiveTab] = useState<"editor" | "ast">("editor");
+  const [astData, setAstData] = useState<{
+    tables?: Array<{
+      value?: {
+        metadata?: { id?: string; export?: boolean };
+        rules?: unknown[];
+      };
+    }>;
+    error?: string;
+    diagnostics?: Array<{ line: number; message: string; severity: string }>;
+    source?: string;
+  } | null>(null);
 
   // Initialize TBL worker
-  const { validateSyntax, getTableIds, getExportedTableIds, generateContent } =
-    useTblWorker();
+  const {
+    validateSyntax,
+    getTableIds,
+    getExportedTableIds,
+    generateContent,
+    parseWithDiagnostics,
+  } = useTblWorker();
 
   // Simple worker ready check - if functions are available, worker is ready
   const isWorkerReady =
     !!validateSyntax &&
     !!getTableIds &&
     !!getExportedTableIds &&
-    !!generateContent;
+    !!generateContent &&
+    !!parseWithDiagnostics;
 
   const [code, setCode] = useState(`// Welcome to the TBL Language Editor!
 // This editor supports the TBL (Table) format with dice roll expressions and comments
@@ -61,7 +81,7 @@ function App() {
     }
   }, [monacoInstance]);
 
-  // Validate syntax and update markers, also fetch table IDs
+  // Validate syntax and update markers, also fetch table IDs and parse AST
   const validateAndUpdateMarkers = useCallback(
     async (content: string) => {
       if (!isWorkerReady || !editorRef.current || !monacoInstance) {
@@ -70,12 +90,25 @@ function App() {
 
       setIsValidating(true);
       try {
-        // Validate syntax
-        const result = await validateSyntax(content);
-        setDiagnostics(result.diagnostics);
+        // Parse with diagnostics (this gives us both validation and AST)
+        const parseResult = await parseWithDiagnostics(content);
+        setDiagnostics(parseResult.diagnostics);
+
+        // Update AST data if parsing was successful
+        if (parseResult.success && parseResult.astJson) {
+          const astObject = JSON.parse(parseResult.astJson);
+          setAstData(astObject);
+        } else {
+          // Set error state for AST if parsing failed
+          setAstData({
+            error: "Failed to parse",
+            diagnostics: parseResult.diagnostics,
+            source: content,
+          });
+        }
 
         // If validation is successful, fetch table IDs
-        if (result.isValid) {
+        if (parseResult.success) {
           try {
             const [allTablesResult, exportedTablesResult] = await Promise.all([
               getTableIds(content),
@@ -101,8 +134,8 @@ function App() {
         }
 
         // Convert diagnostics to Monaco markers
-        const markers: monaco.editor.IMarkerData[] = result.diagnostics.map(
-          (diagnostic) => ({
+        const markers: monaco.editor.IMarkerData[] =
+          parseResult.diagnostics.map((diagnostic) => ({
             message: diagnostic.message,
             severity:
               diagnostic.severity === "error"
@@ -114,8 +147,7 @@ function App() {
             startColumn: diagnostic.column,
             endLineNumber: diagnostic.endLine,
             endColumn: diagnostic.endColumn,
-          })
-        );
+          }));
 
         // Set markers on the editor model
         const model = editorRef.current.getModel();
@@ -144,7 +176,7 @@ function App() {
     [
       isWorkerReady,
       monacoInstance,
-      validateSyntax,
+      parseWithDiagnostics,
       getTableIds,
       getExportedTableIds,
       showOnlyExported,
@@ -269,27 +301,157 @@ function App() {
       </header>
 
       <div style={{ flex: 1, display: "flex" }}>
-        {/* Editor Panel */}
-        <div
-          style={{ flex: 1, padding: "1rem", borderRight: "1px solid #ccc" }}
-        >
-          <Editor
-            height="100%"
-            language={isLanguageReady ? "tbl" : "plaintext"}
-            value={code}
-            onChange={handleEditorChange}
-            onMount={handleEditorDidMount}
-            theme={isLanguageReady ? "tbl-dark" : "vs-dark"}
-            options={{
-              minimap: { enabled: false },
-              fontSize: 14,
-              lineNumbers: "on",
-              roundedSelection: false,
-              scrollBeyondLastLine: false,
-              automaticLayout: true,
-              wordWrap: "on",
+        {/* Main Content Area with Tabs */}
+        <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+          {/* Tab Headers */}
+          <div
+            style={{
+              display: "flex",
+              borderBottom: "1px solid #ccc",
             }}
-          />
+          >
+            <button
+              onClick={() => setActiveTab("editor")}
+              style={{
+                padding: "0.75rem 1.5rem",
+                border: "none",
+                backgroundColor:
+                  activeTab === "editor" ? "#007bff" : "transparent",
+                color: activeTab === "editor" ? "white" : "#ddd",
+                cursor: "pointer",
+                borderBottom:
+                  activeTab === "editor" ? "2px solid #007bff" : "none",
+                fontWeight: activeTab === "editor" ? "bold" : "normal",
+                borderRadius: 0,
+              }}
+            >
+              📝 Editor
+            </button>
+            <button
+              onClick={() => setActiveTab("ast")}
+              style={{
+                padding: "0.75rem 1.5rem",
+                border: "none",
+                backgroundColor:
+                  activeTab === "ast" ? "#007bff" : "transparent",
+                color: activeTab === "ast" ? "white" : "#ddd",
+                cursor: "pointer",
+                borderBottom:
+                  activeTab === "ast" ? "2px solid #007bff" : "none",
+                fontWeight: activeTab === "ast" ? "bold" : "normal",
+                borderRadius: 0,
+              }}
+            >
+              🌳 AST Viewer
+            </button>
+          </div>
+
+          {/* Tab Content */}
+          <div style={{ flex: 1, padding: "1rem" }}>
+            {activeTab === "editor" ? (
+              <Editor
+                height="100%"
+                language={isLanguageReady ? "tbl" : "plaintext"}
+                value={code}
+                onChange={handleEditorChange}
+                onMount={handleEditorDidMount}
+                theme={isLanguageReady ? "tbl-dark" : "vs-dark"}
+                options={{
+                  minimap: { enabled: false },
+                  fontSize: 14,
+                  lineNumbers: "on",
+                  roundedSelection: false,
+                  scrollBeyondLastLine: false,
+                  automaticLayout: true,
+                  wordWrap: "on",
+                }}
+              />
+            ) : (
+              <div
+                style={{
+                  height: "100%",
+                  display: "flex",
+                  flexDirection: "column",
+                }}
+              >
+                {/* AST Content */}
+                <div
+                  style={{
+                    flex: 1,
+                    border: "1px solid #dee2e6",
+                    borderRadius: "4px",
+                    overflow: "hidden",
+                  }}
+                >
+                  {astData ? (
+                    astData.error ? (
+                      <div
+                        style={{
+                          padding: "1rem",
+                          color: "#dc3545",
+                          backgroundColor: "#f8d7da",
+                          border: "1px solid #f5c6cb",
+                          borderRadius: "4px",
+                          margin: "1rem",
+                        }}
+                      >
+                        <h4>Parse Error</h4>
+                        <p>
+                          <strong>Error:</strong> {astData.error}
+                        </p>
+                        {astData.diagnostics && (
+                          <div>
+                            <strong>Diagnostics:</strong>
+                            <ul>
+                              {astData.diagnostics.map(
+                                (
+                                  d: {
+                                    line: number;
+                                    message: string;
+                                    severity: string;
+                                  },
+                                  i: number
+                                ) => (
+                                  <li key={i}>
+                                    Line {d.line}: {d.message} ({d.severity})
+                                  </li>
+                                )
+                              )}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div style={{ height: "100%", padding: "0.5rem" }}>
+                        <JsonView
+                          value={astData}
+                          collapsed={1}
+                          displayDataTypes={false}
+                          enableClipboard={true}
+                          style={githubDarkTheme}
+                        />
+                      </div>
+                    )
+                  ) : (
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "center",
+                        alignItems: "center",
+                        height: "100%",
+                        color: "#6c757d",
+                        fontSize: "1.1rem",
+                      }}
+                    >
+                      {isValidating
+                        ? "🔄 Parsing AST..."
+                        : "No valid code to parse"}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Table Generation Panel */}
@@ -299,7 +461,7 @@ function App() {
             padding: "1rem",
             display: "flex",
             flexDirection: "column",
-            backgroundColor: "#222",
+            backgroundColor: "#0d1117",
             color: "white",
             borderLeft: "1px solid #dee2e6",
           }}
@@ -313,7 +475,7 @@ function App() {
             style={{
               marginBottom: "1rem",
               padding: "0.5rem",
-              backgroundColor: "#333",
+              backgroundColor: "#0d1117",
               borderRadius: "4px",
               border: "1px solid #555",
             }}
@@ -475,7 +637,7 @@ function App() {
                 overflow: "auto",
                 minHeight: "150px",
                 maxHeight: "300px",
-                backgroundColor: "#222",
+                backgroundColor: "#0d1117",
                 color: "white",
               }}
             >
