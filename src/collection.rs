@@ -41,6 +41,7 @@ pub struct Collection {
     tables: HashMap<String, Table>,
     distributions: HashMap<String, WeightedIndex<f64>>,
     rng: ThreadRng,
+    table_order: Vec<String>, // Preserve the order tables appear in source
 }
 
 impl Collection {
@@ -50,8 +51,9 @@ impl Collection {
 
         let mut tables = HashMap::new();
         let mut distributions = HashMap::new();
+        let mut table_order = Vec::new();
 
-        // First pass: collect all tables
+        // First pass: collect all tables and preserve order
         for table_node in program.tables {
             let table = table_node.value;
             let table_id = table.metadata.id.clone();
@@ -60,6 +62,7 @@ impl Collection {
                 return Err(CollectionError::EmptyTable(table_id));
             }
 
+            table_order.push(table_id.clone());
             tables.insert(table_id, table);
         }
 
@@ -79,6 +82,7 @@ impl Collection {
             tables,
             distributions,
             rng: thread_rng(),
+            table_order,
         })
     }
 
@@ -180,15 +184,22 @@ impl Collection {
 
     /// Get a list of all table IDs in the collection
     pub fn get_table_ids(&self) -> Vec<String> {
-        self.tables.keys().cloned().collect()
+        // Return table IDs in the order they appear in the source
+        self.table_order.clone()
     }
 
     /// Get a list of exported table IDs in the collection
     pub fn get_exported_table_ids(&self) -> Vec<String> {
-        self.tables
+        // Return exported table IDs in the order they appear in the source
+        self.table_order
             .iter()
-            .filter(|(_, table)| table.metadata.export)
-            .map(|(id, _)| id.clone())
+            .filter(|table_id| {
+                self.tables
+                    .get(*table_id)
+                    .map(|table| table.metadata.export)
+                    .unwrap_or(false)
+            })
+            .cloned()
             .collect()
     }
 }
@@ -359,5 +370,26 @@ mod tests {
 
         let collection = Collection::new(source);
         assert!(collection.is_ok(), "Self-references should be valid");
+    }
+
+    #[test]
+    fn test_table_ids_order() {
+        let source = r#"#zebra
+1.0: striped
+
+#alpha
+1.0: first
+
+#beta[export]
+1.0: second"#;
+
+        let collection = Collection::new(source).unwrap();
+        let table_ids = collection.get_table_ids();
+
+        // Should return tables in source order, not alphabetical
+        assert_eq!(table_ids, vec!["zebra", "alpha", "beta"]);
+
+        let exported_ids = collection.get_exported_table_ids();
+        assert_eq!(exported_ids, vec!["beta"]);
     }
 }

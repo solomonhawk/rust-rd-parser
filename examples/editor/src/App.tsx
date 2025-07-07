@@ -17,10 +17,15 @@ function App() {
   const [showOnlyExported, setShowOnlyExported] = useState(false);
 
   // Initialize TBL worker
-  const { validateSyntax, getTableIds, getExportedTableIds, generateContent } = useTblWorker();
+  const { validateSyntax, getTableIds, getExportedTableIds, generateContent } =
+    useTblWorker();
 
   // Simple worker ready check - if functions are available, worker is ready
-  const isWorkerReady = !!validateSyntax && !!getTableIds && !!getExportedTableIds && !!generateContent;
+  const isWorkerReady =
+    !!validateSyntax &&
+    !!getTableIds &&
+    !!getExportedTableIds &&
+    !!generateContent;
 
   const [code, setCode] = useState(`// Welcome to the TBL Language Editor!
 // This editor supports the TBL (Table) format with dice roll expressions and comments
@@ -74,14 +79,17 @@ function App() {
           try {
             const [allTablesResult, exportedTablesResult] = await Promise.all([
               getTableIds(content),
-              getExportedTableIds(content)
+              getExportedTableIds(content),
             ]);
-            
+
             if (allTablesResult.success && allTablesResult.tableIds) {
               // Store all table IDs and filter based on user preference
-              const tablesToShow = showOnlyExported && exportedTablesResult.success && exportedTablesResult.tableIds
-                ? exportedTablesResult.tableIds
-                : allTablesResult.tableIds;
+              const tablesToShow =
+                showOnlyExported &&
+                exportedTablesResult.success &&
+                exportedTablesResult.tableIds
+                  ? exportedTablesResult.tableIds
+                  : allTablesResult.tableIds;
               setTableIds(tablesToShow);
             }
           } catch (error) {
@@ -133,7 +141,14 @@ function App() {
         setIsValidating(false);
       }
     },
-    [isWorkerReady, monacoInstance, validateSyntax, getTableIds, getExportedTableIds, showOnlyExported]
+    [
+      isWorkerReady,
+      monacoInstance,
+      validateSyntax,
+      getTableIds,
+      getExportedTableIds,
+      showOnlyExported,
+    ]
   );
 
   // Debounced validation
@@ -294,19 +309,23 @@ function App() {
           </h3>
 
           {/* Filter Toggle */}
-          <div style={{ 
-            marginBottom: "1rem", 
-            padding: "0.5rem",
-            backgroundColor: "#333",
-            borderRadius: "4px",
-            border: "1px solid #555"
-          }}>
-            <label style={{ 
-              display: "flex", 
-              alignItems: "center", 
-              cursor: "pointer",
-              fontSize: "0.9rem"
-            }}>
+          <div
+            style={{
+              marginBottom: "1rem",
+              padding: "0.5rem",
+              backgroundColor: "#333",
+              borderRadius: "4px",
+              border: "1px solid #555",
+            }}
+          >
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                cursor: "pointer",
+                fontSize: "0.9rem",
+              }}
+            >
               <input
                 type="checkbox"
                 checked={showOnlyExported}
@@ -315,14 +334,16 @@ function App() {
               />
               Show only exported tables
             </label>
-            <div style={{ 
-              fontSize: "0.8rem", 
-              color: "#aaa", 
-              marginTop: "0.25rem",
-              marginLeft: "1.5rem"
-            }}>
-              {showOnlyExported 
-                ? "Showing tables marked with [export]" 
+            <div
+              style={{
+                fontSize: "0.8rem",
+                color: "#aaa",
+                marginTop: "0.25rem",
+                marginLeft: "1.5rem",
+              }}
+            >
+              {showOnlyExported
+                ? "Showing tables marked with [export]"
                 : "Showing all tables"}
             </div>
           </div>
