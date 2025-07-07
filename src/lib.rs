@@ -1,4 +1,5 @@
 pub mod ast;
+pub mod collection;
 pub mod diagnostic;
 pub mod diagnostic_collector;
 pub mod diagnostic_formatter;
@@ -7,6 +8,7 @@ pub mod lexer;
 pub mod parser;
 
 pub use ast::{Expression, Node, Program, Rule, RuleContent, Span, Table, TableMetadata};
+pub use collection::{Collection, CollectionError, CollectionGenResult, CollectionResult};
 pub use diagnostic::{Diagnostic, DiagnosticKind, Severity, SourceLocation};
 pub use diagnostic_collector::DiagnosticCollector;
 pub use diagnostic_formatter::DiagnosticFormatter;
@@ -77,7 +79,10 @@ mod tests {
         assert!(!program.tables[0].value.metadata.export);
         assert_eq!(program.tables[0].value.rules.len(), 1);
         assert_eq!(program.tables[0].value.rules[0].value.weight, 1.5);
-        assert_eq!(program.tables[0].value.rules[0].value.content_text(), "simple rule");
+        assert_eq!(
+            program.tables[0].value.rules[0].value.content_text(),
+            "simple rule"
+        );
     }
 
     #[test]
