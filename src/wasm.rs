@@ -1,6 +1,7 @@
 //! WebAssembly bindings for the TBL parser and collection generator
 
 use crate::{Collection, parse};
+use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 
 // Set up a custom panic hook for better error messages in WASM
@@ -38,6 +39,118 @@ impl WasmParser {
     pub fn validate(source: &str) -> bool {
         set_panic_hook();
         parse(source).is_ok()
+    }
+
+    /// Parse TBL source code and return detailed diagnostics
+    #[wasm_bindgen]
+    pub fn parse_with_diagnostics(source: &str) -> String {
+        set_panic_hook();
+
+        let result = match parse(source) {
+            Ok(program) => {
+                let ast_json = match serde_json::to_string(&program) {
+                    Ok(json) => Some(json),
+                    Err(e) => {
+                        let diagnostic = WasmDiagnostic {
+                            message: format!("JSON serialization error: {}", e),
+                            severity: "error".to_string(),
+                            line: 0,
+                            column: 0,
+                            end_line: 0,
+                            end_column: 0,
+                            source: "".to_string(),
+                        };
+
+                        return serde_json::to_string(&WasmParseResult {
+                            success: false,
+                            ast_json: None,
+                            diagnostics: vec![diagnostic],
+                        })
+                        .unwrap_or_else(|_| "{}".to_string());
+                    }
+                };
+
+                WasmParseResult {
+                    success: true,
+                    ast_json,
+                    diagnostics: vec![], // No diagnostics for successful parse
+                }
+            }
+            Err(parse_error) => {
+                // Convert parse error to diagnostic with proper position info
+                let diagnostic = match &parse_error {
+                    crate::errors::ParseError::UnexpectedToken { diagnostic, .. }
+                    | crate::errors::ParseError::UnexpectedEof { diagnostic, .. }
+                    | crate::errors::ParseError::InvalidCharacter { diagnostic, .. }
+                    | crate::errors::ParseError::InvalidNumber { diagnostic, .. } => {
+                        // Extract position information from the diagnostic
+                        let location = &diagnostic.location;
+                        WasmDiagnostic {
+                            message: parse_error.to_string(),
+                            severity: "error".to_string(),
+                            line: location.line as u32,
+                            column: location.column as u32,
+                            end_line: location.line as u32, // For now, same line
+                            end_column: (location.column + 1) as u32, // Assume single character for now
+                            source: diagnostic.source_line.clone(),
+                        }
+                    }
+                };
+
+                WasmParseResult {
+                    success: false,
+                    ast_json: None,
+                    diagnostics: vec![diagnostic],
+                }
+            }
+        };
+
+        // Serialize the result to JSON for JavaScript consumption
+        serde_json::to_string(&result).unwrap_or_else(|_| {
+            r#"{"success": false, "ast_json": null, "diagnostics": [{"message": "Failed to serialize parse result", "severity": "error", "line": 0, "column": 0, "end_line": 0, "end_column": 0, "source": ""}]}"#.to_string()
+        })
+    }
+
+    /// Quick validation with basic diagnostic info
+    #[wasm_bindgen]
+    pub fn validate_with_diagnostics(source: &str) -> String {
+        set_panic_hook();
+
+        let diagnostics = match parse(source) {
+            Ok(_) => vec![], // No diagnostics for successful parse
+            Err(parse_error) => {
+                // Convert parse error to diagnostic with proper position info
+                let diagnostic = match &parse_error {
+                    crate::errors::ParseError::UnexpectedToken { diagnostic, .. }
+                    | crate::errors::ParseError::UnexpectedEof { diagnostic, .. }
+                    | crate::errors::ParseError::InvalidCharacter { diagnostic, .. }
+                    | crate::errors::ParseError::InvalidNumber { diagnostic, .. } => {
+                        // Extract position information from the diagnostic
+                        let location = &diagnostic.location;
+                        WasmDiagnostic {
+                            message: parse_error.to_string(),
+                            severity: "error".to_string(),
+                            line: location.line as u32,
+                            column: location.column as u32,
+                            end_line: location.line as u32, // For now, same line
+                            end_column: (location.column + 1) as u32, // Assume single character for now
+                            source: diagnostic.source_line.clone(),
+                        }
+                    }
+                };
+                vec![diagnostic]
+            }
+        };
+
+        let result = WasmParseResult {
+            success: diagnostics.is_empty(),
+            ast_json: None,
+            diagnostics,
+        };
+
+        serde_json::to_string(&result).unwrap_or_else(|_| {
+            r#"{"success": false, "ast_json": null, "diagnostics": []}"#.to_string()
+        })
     }
 }
 
@@ -112,6 +225,36 @@ impl WasmUtils {
 0.5: tiny {#shape}"#
             .to_string()
     }
+}
+
+/// Diagnostic information for language server support
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WasmDiagnostic {
+    /// The error/warning message
+    pub message: String,
+    /// The severity level (error, warning, info)
+    pub severity: String,
+    /// The line number (0-based)
+    pub line: u32,
+    /// The column number (0-based)
+    pub column: u32,
+    /// The end line number (0-based)
+    pub end_line: u32,
+    /// The end column number (0-based)
+    pub end_column: u32,
+    /// The source code that caused the diagnostic
+    pub source: String,
+}
+
+/// Parse result with diagnostics for language server
+#[derive(Debug, Serialize, Deserialize)]
+pub struct WasmParseResult {
+    /// Whether parsing was successful
+    pub success: bool,
+    /// JSON representation of the AST (if successful)
+    pub ast_json: Option<String>,
+    /// List of diagnostics (errors, warnings, etc.)
+    pub diagnostics: Vec<WasmDiagnostic>,
 }
 
 #[cfg(test)]

@@ -142,42 +142,18 @@ export function registerTblLanguage(monacoInstance: typeof monaco) {
   try {
     // Check if language is already registered
     const languages = monacoInstance.languages.getLanguages();
-    console.log(
-      "Available languages:",
-      languages.map((l) => l.id)
-    );
 
     if (languages.some((lang) => lang.id === "tbl")) {
       console.log("TBL language already registered");
       return;
     }
 
-    console.log("Registering TBL language...");
-
-    // Register the language
     monacoInstance.languages.register({ id: "tbl" });
-    console.log("Language registered");
-
-    // Set the language configuration
     monacoInstance.languages.setLanguageConfiguration("tbl", tblLanguageConfig);
-    console.log("Language configuration set");
-
-    // Set the tokenizer
     monacoInstance.languages.setMonarchTokensProvider("tbl", tblLanguageTokens);
-    console.log("Tokenizer set");
-
-    // Define and set the theme
     monacoInstance.editor.defineTheme("tbl-dark", tblTheme);
-    console.log("Theme defined");
 
     console.log("TBL language registered successfully");
-
-    // Verify registration
-    const updatedLanguages = monacoInstance.languages.getLanguages();
-    console.log(
-      "Updated languages:",
-      updatedLanguages.map((l) => l.id)
-    );
   } catch (error) {
     console.error("Error registering TBL language:", error);
   }
