@@ -51,10 +51,23 @@ impl DiagnosticFormatter {
         ));
 
         // Show the error pointer
-        let pointer_line = format!(
-            "    │ {}^",
-            " ".repeat(diagnostic.location.column.saturating_sub(1))
-        );
+        let pointer_line = if let (Some(_end_position), Some(end_column)) = 
+            (diagnostic.location.end_position, diagnostic.location.end_column) {
+            // Span-based highlighting
+            let start_col = diagnostic.location.column.saturating_sub(1);
+            let span_length = end_column.saturating_sub(diagnostic.location.column).max(1);
+            format!(
+                "    │ {}{}",
+                " ".repeat(start_col),
+                "^".repeat(span_length)
+            )
+        } else {
+            // Single position highlighting
+            format!(
+                "    │ {}^",
+                " ".repeat(diagnostic.location.column.saturating_sub(1))
+            )
+        };
         output.push_str(&pointer_line);
         output.push('\n');
 

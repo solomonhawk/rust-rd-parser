@@ -95,6 +95,7 @@ impl Parser {
 
         // Check for optional flags
         if self.check(&TokenType::LeftBracket) {
+            let bracket_start = self.peek().span.start; // Remember where the bracket starts
             self.advance(); // consume '['
 
             // Parse flags
@@ -103,11 +104,34 @@ impl Parser {
                     self.advance();
                     metadata = metadata.with_export(true);
                 } else {
+                    // Calculate span from opening bracket to current position (or closing bracket if found)
+                    let mut error_end = self.peek().span.end;
+
+                    // Look ahead to find the closing bracket to include the entire flag list
+                    let mut lookahead = self.current;
+                    while lookahead < self.tokens.len() {
+                        match &self.tokens[lookahead].token_type {
+                            TokenType::RightBracket => {
+                                error_end = self.tokens[lookahead].span.end;
+                                break;
+                            }
+                            TokenType::Newline | TokenType::Eof | TokenType::Hash => {
+                                // Stop if we hit these tokens (malformed flag list)
+                                break;
+                            }
+                            _ => {
+                                error_end = self.tokens[lookahead].span.end;
+                                lookahead += 1;
+                            }
+                        }
+                    }
+
                     let token = self.peek();
                     let diagnostic = self
                         .diagnostic_collector
-                        .parse_error(
-                            token.span.start,
+                        .parse_error_span(
+                            bracket_start,
+                            error_end,
                             format!("Unknown flag '{}' in table declaration", token.token_type),
                         )
                         .with_suggestion("Valid flags are: export".to_string());

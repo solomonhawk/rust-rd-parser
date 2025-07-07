@@ -1,5 +1,5 @@
 /// Diagnostic system for collecting and reporting parse errors
-/// 
+///
 /// This module provides a clean separation between error data collection
 /// and error formatting/rendering.
 /// Source location information
@@ -8,6 +8,10 @@ pub struct SourceLocation {
     pub position: usize,
     pub line: usize,
     pub column: usize,
+    /// Optional end position for span-based diagnostics
+    pub end_position: Option<usize>,
+    /// Optional end column for span-based diagnostics  
+    pub end_column: Option<usize>,
 }
 
 /// A diagnostic represents a structured error with source context
@@ -63,7 +67,9 @@ impl Diagnostic {
 
     pub fn severity(&self) -> Severity {
         match self.kind {
-            DiagnosticKind::LexError | DiagnosticKind::ParseError | DiagnosticKind::SemanticError => Severity::Error,
+            DiagnosticKind::LexError
+            | DiagnosticKind::ParseError
+            | DiagnosticKind::SemanticError => Severity::Error,
         }
     }
 }

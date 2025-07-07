@@ -86,8 +86,8 @@ impl WasmParser {
                             severity: "error".to_string(),
                             line: location.line as u32,
                             column: location.column as u32,
-                            end_line: location.line as u32, // For now, same line
-                            end_column: (location.column + 1) as u32, // Assume single character for now
+                            end_line: location.line as u32, // For now, same line (could extend to multi-line)
+                            end_column: location.end_column.unwrap_or(location.column + 1) as u32,
                             source: diagnostic.source_line.clone(),
                         }
                     }
@@ -128,8 +128,8 @@ impl WasmParser {
                             severity: "error".to_string(),
                             line: location.line as u32,
                             column: location.column as u32,
-                            end_line: location.line as u32, // For now, same line
-                            end_column: (location.column + 1) as u32, // Assume single character for now
+                            end_line: location.line as u32, // For now, same line (could extend to multi-line)
+                            end_column: location.end_column.unwrap_or(location.column + 1) as u32,
                             source: diagnostic.source_line.clone(),
                         }
                     }
