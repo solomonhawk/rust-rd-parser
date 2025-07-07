@@ -1,0 +1,28 @@
+// This is a sample TBL file with comments to test the new comment functionality
+
+/*
+   Multi-line comment at the top of the file
+   This should be completely ignored by the parser
+*/
+
+#color
+1.0: red       // This is a line comment after a rule
+1.0: blue      /* inline block comment */
+2.0: green
+// 1.0: commented out rule - this should be ignored
+/* 1.0: another commented rule */
+
+#item-type      // Table with hyphenated name
+1.0: sword
+1.0: shield
+0.5: potion
+
+// This table uses references with comments
+#magical-item
+1.0: {#color} {#item-type}    // Simple reference
+2.0: enchanted {#color} {#item-type}  /* more powerful version */
+
+/*
+   Block comment before the end of file
+   Testing multi-line comments
+*/

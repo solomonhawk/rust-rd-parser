@@ -123,6 +123,35 @@ impl Lexer {
             // Skip spaces and tabs (except when in rule text)
             ' ' | '\t' if !self.in_rule_text => Ok(None),
 
+            // Handle comments
+            '/' => {
+                if self.peek() == '/' {
+                    // Line comment - consume until end of line
+                    self.line_comment()
+                } else if self.peek() == '*' {
+                    // Block comment - consume until */
+                    self.block_comment()
+                } else if self.in_rule_text && !self.in_expression {
+                    // Regular '/' character in rule text
+                    self.current -= 1;
+                    self.text_segment()
+                } else {
+                    // Invalid '/' character outside rule text
+                    let diagnostic = self
+                        .diagnostic_collector
+                        .lex_error(self.current - 1, "Invalid character '/'".to_string())
+                        .with_suggestion(
+                            "Only numbers, colons, and rule text are allowed in this language"
+                                .to_string(),
+                        );
+
+                    Err(LexError::InvalidCharacter {
+                        character: c,
+                        diagnostic: Box::new(diagnostic),
+                    })
+                }
+            }
+
             // Newlines end rule text and reset state
             '\n' => {
                 self.in_rule_text = false;
@@ -275,8 +304,13 @@ impl Lexer {
 
     fn text_segment(&mut self) -> LexResult<Option<Token>> {
         // Don't skip whitespace - we want to preserve spaces between expressions
-        // Collect text until we hit a brace, newline, or EOF
-        while !self.is_at_end() && self.peek() != '{' && self.peek() != '}' && self.peek() != '\n' {
+        // Collect text until we hit a brace, newline, comment, or EOF
+        while !self.is_at_end()
+            && self.peek() != '{'
+            && self.peek() != '}'
+            && self.peek() != '\n'
+            && !(self.peek() == '/' && (self.peek_next() == '/' || self.peek_next() == '*'))
+        {
             self.advance();
         }
 
@@ -329,6 +363,61 @@ impl Lexer {
             self.lexeme(),
             Span::new(self.start, self.current),
         )
+    }
+
+    fn line_comment(&mut self) -> LexResult<Option<Token>> {
+        // Consume the second '/'
+        self.advance();
+
+        // Consume characters until end of line or end of file
+        while !self.is_at_end() && self.peek() != '\n' {
+            self.advance();
+        }
+
+        // Return None to skip this comment
+        Ok(None)
+    }
+
+    fn block_comment(&mut self) -> LexResult<Option<Token>> {
+        // Consume the '*'
+        self.advance();
+
+        // Look for the closing */
+        while !self.is_at_end() {
+            if self.peek() == '*' && self.peek_next() == '/' {
+                // Found the end - consume both characters
+                self.advance(); // consume '*'
+                self.advance(); // consume '/'
+                break;
+            }
+
+            // If we encounter a newline, reset rule text state
+            if self.peek() == '\n' {
+                self.in_rule_text = false;
+            }
+
+            self.advance();
+        }
+
+        // Check if we reached EOF without finding the closing */
+        if self.is_at_end()
+            && !(self.input.len() >= 2
+                && self.input[self.input.len() - 2] == '*'
+                && self.input[self.input.len() - 1] == '/')
+        {
+            let diagnostic = self
+                .diagnostic_collector
+                .lex_error(self.start, "Unterminated block comment".to_string())
+                .with_suggestion("Add */ to close the block comment".to_string());
+
+            return Err(LexError::InvalidCharacter {
+                character: '*',
+                diagnostic: Box::new(diagnostic),
+            });
+        }
+
+        // Return None to skip this comment
+        Ok(None)
     }
 }
 

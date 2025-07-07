@@ -326,4 +326,91 @@ mod tests {
             panic!("Expected identifier token with hyphens");
         }
     }
+
+    #[test]
+    fn test_line_comments() {
+        let source = r#"// This is a line comment
+#test
+1.0: rule text // comment at end of line
+2.0: another rule"#;
+
+        let result = parse(source);
+        assert!(result.is_ok(), "Should parse with line comments");
+
+        let program = result.unwrap();
+        assert_eq!(program.tables.len(), 1);
+        assert_eq!(program.tables[0].value.rules.len(), 2);
+    }
+
+    #[test]
+    fn test_block_comments() {
+        let source = r#"/* This is a 
+           multi-line 
+           block comment */
+#test
+1.0: rule /* inline comment */ text
+2.0: another rule"#;
+
+        let result = parse(source);
+        assert!(result.is_ok(), "Should parse with block comments");
+
+        let program = result.unwrap();
+        assert_eq!(program.tables.len(), 1);
+        assert_eq!(program.tables[0].value.rules.len(), 2);
+    }
+
+    #[test]
+    fn test_comments_in_collection() {
+        let source = r#"// Comment before table
+#color
+1.0: red // end of line comment
+/* block comment */ 2.0: blue
+
+// Another comment
+#item
+1.0: {#color} item /* comment */ text"#;
+
+        let result = Collection::new(source);
+        assert!(result.is_ok(), "Collection should work with comments");
+
+        let mut collection = result.unwrap();
+        assert!(collection.has_table("color"));
+        assert!(collection.has_table("item"));
+
+        let generation_result = collection.generate("item", 1);
+        assert!(
+            generation_result.is_ok(),
+            "Should generate with commented source"
+        );
+    }
+
+    #[test]
+    fn test_unterminated_block_comment() {
+        let source = r#"#test
+1.0: rule text /* unterminated comment
+2.0: another rule"#;
+
+        let result = parse(source);
+        assert!(
+            result.is_err(),
+            "Should fail with unterminated block comment"
+        );
+    }
+
+    #[test]
+    fn test_tokenize_with_comments() {
+        let source = "// comment\n#test // another\n1.0: text";
+        let result = tokenize(source);
+        assert!(result.is_ok());
+
+        let tokens = result.unwrap();
+        // Should have: Hash, Identifier, Newline, Number, Colon, TextSegment, EOF
+        // Comments should be filtered out
+        let non_eof_tokens: Vec<_> = tokens
+            .iter()
+            .filter(|t| !matches!(t.token_type, TokenType::Eof))
+            .collect();
+
+        assert!(non_eof_tokens.len() >= 5); // At least the core tokens
+    }
 }
