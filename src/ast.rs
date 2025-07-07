@@ -47,16 +47,49 @@ pub struct Rule {
     pub text: String,
 }
 
-/// The root of the AST - a program containing multiple rules
+/// Table metadata containing id and optional flags
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct Program {
+pub struct TableMetadata {
+    pub id: String,
+    pub export: bool,
+}
+
+impl TableMetadata {
+    pub fn new(id: String) -> Self {
+        Self { id, export: false }
+    }
+
+    pub fn with_export(mut self, export: bool) -> Self {
+        self.export = export;
+        self
+    }
+}
+
+/// A table containing metadata and a list of rules
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct Table {
+    pub metadata: TableMetadata,
     pub rules: Vec<Node<Rule>>,
 }
 
+impl Table {
+    pub fn new(metadata: TableMetadata, rules: Vec<Node<Rule>>) -> Self {
+        Self { metadata, rules }
+    }
+}
+
+/// The root of the AST - a TBL program containing multiple tables
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct Program {
+    pub tables: Vec<Node<Table>>,
+}
+
 impl Program {
-    pub fn new(rules: Vec<Node<Rule>>) -> Self {
-        Self { rules }
+    pub fn new(tables: Vec<Node<Table>>) -> Self {
+        Self { tables }
     }
 }
 

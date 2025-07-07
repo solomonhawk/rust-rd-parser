@@ -1,11 +1,12 @@
 use crate::ast::Span;
-use crate::errors::{ErrorContext, LexError, LexResult};
+use crate::diagnostic_collector::DiagnosticCollector;
+use crate::errors::{LexError, LexResult};
 use std::fmt;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-/// Represents the different types of tokens in our simple language
+/// Represents the different types of tokens in our TBL language
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum TokenType {
@@ -17,6 +18,21 @@ pub enum TokenType {
 
     /// Rule text (everything after the colon until newline)
     RuleText(String),
+
+    /// Hash symbol '#' for table declarations
+    Hash,
+
+    /// Table identifier (after #)
+    Identifier(String),
+
+    /// Left bracket '['
+    LeftBracket,
+
+    /// Right bracket ']'
+    RightBracket,
+
+    /// Export keyword
+    Export,
 
     /// Newline character
     Newline,
@@ -47,10 +63,10 @@ impl Token {
 /// Lexer for tokenizing input source code
 pub struct Lexer {
     input: Vec<char>,
-    source: String,
     current: usize,
     start: usize,
     in_rule_text: bool,
+    diagnostic_collector: DiagnosticCollector,
 }
 
 impl Lexer {
@@ -58,10 +74,10 @@ impl Lexer {
     pub fn new(input: &str) -> Self {
         Self {
             input: input.chars().collect(),
-            source: input.to_string(),
             current: 0,
             start: 0,
             in_rule_text: false,
+            diagnostic_collector: DiagnosticCollector::new(input.to_string()),
         }
     }
 
@@ -102,6 +118,15 @@ impl Lexer {
                 Ok(Some(self.make_token(TokenType::Newline)))
             }
 
+            // Hash symbol for table declarations
+            '#' if !self.in_rule_text => Ok(Some(self.make_token(TokenType::Hash))),
+
+            // Left bracket for flags
+            '[' if !self.in_rule_text => Ok(Some(self.make_token(TokenType::LeftBracket))),
+
+            // Right bracket for flags
+            ']' if !self.in_rule_text => Ok(Some(self.make_token(TokenType::RightBracket))),
+
             // Colon transitions us into rule text mode
             ':' if !self.in_rule_text => {
                 self.in_rule_text = true;
@@ -111,6 +136,9 @@ impl Lexer {
             // Numbers (positive floating point only) - only when not in rule text
             c if c.is_ascii_digit() && !self.in_rule_text => self.number(),
 
+            // Identifiers (table names and keywords) - only when not in rule text
+            c if c.is_alphabetic() && !self.in_rule_text => self.identifier(),
+
             // Everything else when in rule text mode
             _ if self.in_rule_text => {
                 // Backtrack and collect rule text
@@ -119,29 +147,26 @@ impl Lexer {
             }
 
             _ => {
-                let context = ErrorContext::new(&self.source, self.current - 1);
                 let suggestion = match c {
-                    ':' if self.in_rule_text => Some(
-                        "Colons inside rule text are allowed, this might be a parser bug"
+                    '-' => Some(
+                        "Negative numbers are not allowed. Use positive weights like 1.0, 2.5"
                             .to_string(),
                     ),
-                    c if c.is_ascii_alphabetic() && !self.in_rule_text => Some(
-                        "Rule text must come after a colon. Did you forget the weight and colon?"
-                            .to_string(),
-                    ),
-                    c if c.is_ascii_digit() && self.in_rule_text => {
-                        Some("Numbers inside rule text are allowed".to_string())
-                    }
+                    ':' => Some("Colons are only allowed after a weight number".to_string()),
                     _ => Some(
-                        "Only numbers (weights), colons, and rule text are allowed in this format"
+                        "Only numbers, colons, and rule text are allowed in this language"
                             .to_string(),
                     ),
                 };
 
+                let diagnostic = self
+                    .diagnostic_collector
+                    .lex_error(self.current - 1, format!("Invalid character '{}'", c))
+                    .with_suggestion(suggestion.unwrap());
+
                 Err(LexError::InvalidCharacter {
                     character: c,
-                    context,
-                    suggestion,
+                    diagnostic: Box::new(diagnostic),
                 })
             }
         }
@@ -164,23 +189,32 @@ impl Lexer {
 
         let lexeme = self.lexeme();
         let value = lexeme.parse::<f64>().map_err(|_| {
-            let context = ErrorContext::new(&self.source, self.start);
-            LexError::InvalidNumber {
-                context,
-                reason: format!("'{}' is not a valid number", lexeme),
-                suggestion: Some(
+            let diagnostic = self
+                .diagnostic_collector
+                .lex_error(self.start, format!("'{}' is not a valid number", lexeme))
+                .with_suggestion(
                     "Numbers should be positive decimal values like 1.5, 2.0, or 42".to_string(),
-                ),
+                );
+
+            LexError::InvalidNumber {
+                reason: format!("'{}' is not a valid number", lexeme),
+                diagnostic: Box::new(diagnostic),
             }
         })?;
 
         // Ensure it's positive
         if value <= 0.0 {
-            let context = ErrorContext::new(&self.source, self.start);
+            let diagnostic = self
+                .diagnostic_collector
+                .lex_error(
+                    self.start,
+                    format!("Weight must be positive, but got {}", value),
+                )
+                .with_suggestion("Try using a positive number like 1.0, 2.5, or 10".to_string());
+
             return Err(LexError::InvalidNumber {
-                context,
                 reason: format!("Weight must be positive, but got {}", value),
-                suggestion: Some("Try using a positive number like 1.0, 2.5, or 10".to_string()),
+                diagnostic: Box::new(diagnostic),
             });
         }
 
@@ -212,6 +246,25 @@ impl Lexer {
 
         Ok(Some(Token::new(
             TokenType::RuleText(text.clone()),
+            text,
+            Span::new(self.start, self.current),
+        )))
+    }
+
+    fn identifier(&mut self) -> LexResult<Option<Token>> {
+        // Collect alphanumeric characters and underscores
+        while !self.is_at_end() && (self.peek().is_alphanumeric() || self.peek() == '_') {
+            self.advance();
+        }
+
+        let text = self.lexeme();
+        let token_type = match text.as_str() {
+            "export" => TokenType::Export,
+            _ => TokenType::Identifier(text.clone()),
+        };
+
+        Ok(Some(Token::new(
+            token_type,
             text,
             Span::new(self.start, self.current),
         )))
@@ -262,6 +315,11 @@ impl fmt::Display for TokenType {
             TokenType::Number(n) => write!(f, "{}", n),
             TokenType::Colon => write!(f, ":"),
             TokenType::RuleText(text) => write!(f, "{}", text),
+            TokenType::Hash => write!(f, "#"),
+            TokenType::Identifier(name) => write!(f, "{}", name),
+            TokenType::LeftBracket => write!(f, "["),
+            TokenType::RightBracket => write!(f, "]"),
+            TokenType::Export => write!(f, "export"),
             TokenType::Newline => write!(f, "\\n"),
             TokenType::Eof => write!(f, "EOF"),
         }

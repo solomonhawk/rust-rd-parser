@@ -1,23 +1,25 @@
 use parser::parse;
 
 pub fn main() {
-    println!("🚀 Rust Recursive Descent Parser Demo");
-    println!("=====================================");
-    println!("This parser handles a simple format: <weight>: <rule>");
+    println!("🚀 Rust TBL (Table) Language Parser Demo");
+    println!("=========================================");
+    println!("This parser handles TBL format: #table_id[flags] followed by weight: rule entries");
     println!("Let's test various inputs and see the enhanced error reporting!\n");
 
     // Test successful cases first
     let success_examples = vec![
-        ("1.5: simple rule", "Basic rule"),
-        (r#"1.0: first rule
-2.5: second rule
-10.0: third rule"#, "Multiple rules"),
-        (r#"3.14: rule with numbers 123 and symbols !@#
-0.5: rule with multiple   spaces
-100.0: rule with punctuation, commas; and colons: but only the first colon matters
-42.0: rule with "quotes" and 'apostrophes'"#, "Rules with various content"),
-        ("0.001: very small weight", "Small weight"),
-        ("999.999: very large weight", "Large weight"),
+        ("#shape\n1.5: simple rule", "Basic table"),
+        ("#shapes\n1.0: circle\n2.5: square\n10.0: triangle", "Single table with multiple rules"),
+        ("#shapes[export]\n3.14: circle\n0.5: square", "Table with export flag"),
+        (r#"#shapes
+1.0: circle
+2.5: square
+
+#colors[export]
+1.0: red
+3.0: blue"#, "Multiple tables"),
+        ("#test\n0.001: very small weight", "Small weight"),
+        ("#test\n999.999: very large weight", "Large weight"),
     ];
 
     println!("✅ SUCCESSFUL PARSING EXAMPLES");
@@ -29,9 +31,18 @@ pub fn main() {
         
         match parse(example) {
             Ok(program) => {
-                println!("✅ Parsed {} rule(s) successfully!", program.rules.len());
-                for (j, rule) in program.rules.iter().enumerate() {
-                    println!("   Rule {}: weight={}, text=\"{}\"", j + 1, rule.value.weight, rule.value.text);
+                let total_rules: usize = program.tables.iter().map(|t| t.value.rules.len()).sum();
+                println!("✅ Parsed {} table(s) with {} total rules!", program.tables.len(), total_rules);
+                for (i, table) in program.tables.iter().enumerate() {
+                    println!("   Table {}: id='{}', export={}, {} rules", 
+                        i + 1, 
+                        table.value.metadata.id, 
+                        table.value.metadata.export,
+                        table.value.rules.len()
+                    );
+                    for (j, rule) in table.value.rules.iter().enumerate() {
+                        println!("     Rule {}: weight={}, text=\"{}\"", j + 1, rule.value.weight, rule.value.text);
+                    }
                 }
             }
             Err(e) => {
@@ -43,18 +54,18 @@ pub fn main() {
 
     // Now test error cases with enhanced reporting
     let error_examples = vec![
-        ("-1.0: negative weight", "Negative weight (should be positive)"),
-        ("0: zero weight", "Zero weight (should be positive)"),
-        ("abc: not a number", "Invalid weight format"),
-        ("1.5 missing colon after weight", "Missing colon separator"),
-        ("1.5:", "Missing rule text after colon"),
-        (": missing weight before colon", "Missing weight"),
-        ("1.5: valid rule\n-2.0: another negative", "Mixed valid/invalid"),
-        ("1.5: valid rule\n2.0 missing colon", "Missing colon in second rule"),
+        ("#test\n-1.0: negative weight", "Negative weight (should be positive)"),
+        ("#test\n0: zero weight", "Zero weight (should be positive)"),
+        ("abc: not a number", "Missing table declaration"),
+        ("#test\n1.5 missing colon after weight", "Missing colon separator"),
+        ("#test\n1.5:", "Missing rule text after colon"),
+        ("#\n1.5: missing table name", "Missing table identifier"),
+        ("#test[unknown]\n1.5: unknown flag", "Unknown table flag"),
+        ("#test[export\n1.5: missing bracket", "Missing closing bracket"),
         ("", "Empty input"),
         ("   \n  \n", "Only whitespace"),
-        ("1.5.5.5: too many dots", "Invalid number format"),
-        ("1e5: scientific notation", "Scientific notation (not supported)"),
+        ("#test\n1.5.5.5: too many dots", "Invalid number format"),
+        ("#test\n1e5: scientific notation", "Scientific notation (not supported)"),
     ];
 
     println!("❌ ERROR HANDLING EXAMPLES");
@@ -67,9 +78,15 @@ pub fn main() {
         
         match parse(example) {
             Ok(program) => {
-                println!("✅ Unexpectedly parsed {} rule(s):", program.rules.len());
-                for (j, rule) in program.rules.iter().enumerate() {
-                    println!("   Rule {}: weight={}, text=\"{}\"", j + 1, rule.value.weight, rule.value.text);
+                let total_rules: usize = program.tables.iter().map(|t| t.value.rules.len()).sum();
+                println!("✅ Unexpectedly parsed {} table(s) with {} total rules:", program.tables.len(), total_rules);
+                for (i, table) in program.tables.iter().enumerate() {
+                    println!("   Table {}: id='{}', export={}, {} rules", 
+                        i + 1, 
+                        table.value.metadata.id, 
+                        table.value.metadata.export,
+                        table.value.rules.len()
+                    );
                 }
             }
             Err(e) => {
@@ -79,9 +96,10 @@ pub fn main() {
         println!("{}",  "─".repeat(50));
     }
 
-    println!("\n🎉 Demo complete! Notice how the error messages provide:");
+    println!("\n🎉 TBL Parser Demo complete! Notice how the error messages provide:");
     println!("   • Exact line and column positions");
     println!("   • Visual pointers to the problem location");
     println!("   • Context-aware suggestions for fixing the issue");
     println!("   • Clear explanations of what went wrong");
+    println!("   • Full support for table-based language structure");
 }

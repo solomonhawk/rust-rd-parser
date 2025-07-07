@@ -1,10 +1,16 @@
 pub mod ast;
+pub mod diagnostic;
+pub mod diagnostic_collector;
+pub mod diagnostic_formatter;
 pub mod errors;
 pub mod lexer;
 pub mod parser;
 
-pub use ast::{Node, Program, Rule, Span};
-pub use errors::{LexError, ParseError, ParseResult, LexResult, ErrorContext};
+pub use ast::{Node, Program, Rule, Span, Table, TableMetadata};
+pub use diagnostic::{Diagnostic, DiagnosticKind, Severity, SourceLocation};
+pub use diagnostic_collector::DiagnosticCollector;
+pub use diagnostic_formatter::DiagnosticFormatter;
+pub use errors::{LexError, LexResult, ParseError, ParseResult};
 pub use lexer::{Lexer, Token, TokenType};
 pub use parser::Parser;
 
@@ -61,33 +67,59 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_simple_rule() {
-        let source = "1.5: simple rule";
+    fn test_simple_table() {
+        let source = "#shape\n1.5: simple rule";
         let result = parse(source);
         assert!(result.is_ok());
         let program = result.unwrap();
-        assert_eq!(program.rules.len(), 1);
-        assert_eq!(program.rules[0].value.weight, 1.5);
-        assert_eq!(program.rules[0].value.text, "simple rule");
+        assert_eq!(program.tables.len(), 1);
+        assert_eq!(program.tables[0].value.metadata.id, "shape");
+        assert_eq!(program.tables[0].value.metadata.export, false);
+        assert_eq!(program.tables[0].value.rules.len(), 1);
+        assert_eq!(program.tables[0].value.rules[0].value.weight, 1.5);
+        assert_eq!(program.tables[0].value.rules[0].value.text, "simple rule");
     }
 
     #[test]
-    fn test_multiple_rules() {
-        let source = r#"1.0: first rule
-2.5: second rule
-10.0: third rule"#;
+    fn test_table_with_export_flag() {
+        let source = "#shape[export]\n1.0: circle\n2.0: square";
         let result = parse(source);
         assert!(result.is_ok());
         let program = result.unwrap();
-        assert_eq!(program.rules.len(), 3);
-        assert_eq!(program.rules[0].value.weight, 1.0);
-        assert_eq!(program.rules[1].value.weight, 2.5);
-        assert_eq!(program.rules[2].value.weight, 10.0);
+        assert_eq!(program.tables.len(), 1);
+        assert_eq!(program.tables[0].value.metadata.id, "shape");
+        assert_eq!(program.tables[0].value.metadata.export, true);
+        assert_eq!(program.tables[0].value.rules.len(), 2);
+    }
+
+    #[test]
+    fn test_multiple_tables() {
+        let source = r#"#shapes
+1.0: circle
+2.5: square
+
+#colors[export]
+1.0: red
+3.0: blue"#;
+        let result = parse(source);
+        assert!(result.is_ok());
+        let program = result.unwrap();
+        assert_eq!(program.tables.len(), 2);
+
+        // First table
+        assert_eq!(program.tables[0].value.metadata.id, "shapes");
+        assert_eq!(program.tables[0].value.metadata.export, false);
+        assert_eq!(program.tables[0].value.rules.len(), 2);
+
+        // Second table
+        assert_eq!(program.tables[1].value.metadata.id, "colors");
+        assert_eq!(program.tables[1].value.metadata.export, true);
+        assert_eq!(program.tables[1].value.rules.len(), 2);
     }
 
     #[test]
     fn test_tokenize() {
-        let source = "1.5: test rule";
+        let source = "#test\n1.5: test rule";
         let result = tokenize(source);
         assert!(result.is_ok());
         let tokens = result.unwrap();
@@ -97,14 +129,14 @@ mod tests {
 
     #[test]
     fn test_invalid_negative_weight() {
-        let source = "-1.0: invalid rule";
+        let source = "#test\n-1.0: invalid rule";
         let result = parse(source);
         assert!(result.is_err());
     }
 
     #[test]
     fn test_missing_colon() {
-        let source = "1.5 missing colon";
+        let source = "#test\n1.5 missing colon";
         let result = parse(source);
         assert!(result.is_err());
     }
@@ -113,18 +145,20 @@ mod tests {
     fn test_empty_input() {
         let source = "";
         let result = parse(source);
-        assert!(result.is_ok());
-        let program = result.unwrap();
-        assert_eq!(program.rules.len(), 0);
+        assert!(result.is_err()); // TBL requires at least one table
     }
 
     #[test]
-    fn test_rule_with_spaces() {
-        let source = "3.14: rule with multiple   spaces";
+    fn test_table_with_spaces() {
+        let source = "#test\n3.14: rule with multiple   spaces";
         let result = parse(source);
         assert!(result.is_ok());
         let program = result.unwrap();
-        assert_eq!(program.rules.len(), 1);
-        assert_eq!(program.rules[0].value.text, "rule with multiple   spaces");
+        assert_eq!(program.tables.len(), 1);
+        assert_eq!(program.tables[0].value.rules.len(), 1);
+        assert_eq!(
+            program.tables[0].value.rules[0].value.text,
+            "rule with multiple   spaces"
+        );
     }
 }
