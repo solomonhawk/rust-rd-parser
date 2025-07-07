@@ -1,6 +1,19 @@
 [package]
-name = "rust-rd-parser"
+name = "parser"
 version = "0.1.0"
 edition = "2024"
+authors = ["Solomon Hawk <roo@solomonhawk.com>"]
+description = "A small Rust library that parses a simple syntax into an AST"
+license = "MIT"
+readme = "README.md"
 
 [dependencies]
+thiserror = "1.0"
+log = "0.4"
+serde = { version = "1.0", features = ["derive"], optional = true }
+
+[dev-dependencies]
+pretty_assertions = "1.4"
+
+[features]
+serde = ["dep:serde"]
