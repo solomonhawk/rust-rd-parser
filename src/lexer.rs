@@ -5,55 +5,23 @@ use std::fmt;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-/// Represents the different types of tokens in our language
+/// Represents the different types of tokens in our simple language
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum TokenType {
-    // Literals
+    /// A positive floating point number
     Number(f64),
-    String(String),
-    Identifier(String),
 
-    // Keywords
-    True,
-    False,
-    Null,
-    Let,
-    If,
-    Else,
-    While,
-    Return,
-    Function,
+    /// The colon separator ':'
+    Colon,
 
-    // Operators
-    Plus,
-    Minus,
-    Star,
-    Slash,
-    Percent,
-    Bang,
-    BangEqual,
-    Equal,
-    EqualEqual,
-    Greater,
-    GreaterEqual,
-    Less,
-    LessEqual,
-    AndAnd,
-    OrOr,
+    /// Rule text (everything after the colon until newline)
+    RuleText(String),
 
-    // Delimiters
-    LeftParen,
-    RightParen,
-    LeftBrace,
-    RightBrace,
-    LeftBracket,
-    RightBracket,
-    Comma,
-    Semicolon,
-
-    // Special
+    /// Newline character
     Newline,
+
+    /// End of file
     Eof,
 }
 
@@ -81,6 +49,7 @@ pub struct Lexer {
     input: Vec<char>,
     current: usize,
     start: usize,
+    in_rule_text: bool,
 }
 
 impl Lexer {
@@ -90,6 +59,7 @@ impl Lexer {
             input: input.chars().collect(),
             current: 0,
             start: 0,
+            in_rule_text: false,
         }
     }
 
@@ -100,8 +70,10 @@ impl Lexer {
         while !self.is_at_end() {
             self.start = self.current;
             match self.scan_token() {
-                Ok(Some(token)) => tokens.push(token),
-                Ok(None) => {} // Skip whitespace
+                Ok(Some(token)) => {
+                    tokens.push(token);
+                }
+                Ok(None) => {} // Skip whitespace (except newlines)
                 Err(e) => return Err(e),
             }
         }
@@ -119,85 +91,30 @@ impl Lexer {
         let c = self.advance();
 
         match c {
-            // Whitespace (skip)
-            ' ' | '\r' | '\t' => Ok(None),
+            // Skip spaces and tabs (except when in rule text)
+            ' ' | '\t' if !self.in_rule_text => Ok(None),
 
-            // Newlines
-            '\n' => Ok(Some(self.make_token(TokenType::Newline))),
-
-            // Single-character tokens
-            '(' => Ok(Some(self.make_token(TokenType::LeftParen))),
-            ')' => Ok(Some(self.make_token(TokenType::RightParen))),
-            '{' => Ok(Some(self.make_token(TokenType::LeftBrace))),
-            '}' => Ok(Some(self.make_token(TokenType::RightBrace))),
-            '[' => Ok(Some(self.make_token(TokenType::LeftBracket))),
-            ']' => Ok(Some(self.make_token(TokenType::RightBracket))),
-            ',' => Ok(Some(self.make_token(TokenType::Comma))),
-            ';' => Ok(Some(self.make_token(TokenType::Semicolon))),
-            '+' => Ok(Some(self.make_token(TokenType::Plus))),
-            '-' => Ok(Some(self.make_token(TokenType::Minus))),
-            '*' => Ok(Some(self.make_token(TokenType::Star))),
-            '/' => Ok(Some(self.make_token(TokenType::Slash))),
-            '%' => Ok(Some(self.make_token(TokenType::Percent))),
-
-            // Two-character tokens
-            '!' => {
-                if self.match_char('=') {
-                    Ok(Some(self.make_token(TokenType::BangEqual)))
-                } else {
-                    Ok(Some(self.make_token(TokenType::Bang)))
-                }
-            }
-            '=' => {
-                if self.match_char('=') {
-                    Ok(Some(self.make_token(TokenType::EqualEqual)))
-                } else {
-                    Ok(Some(self.make_token(TokenType::Equal)))
-                }
-            }
-            '<' => {
-                if self.match_char('=') {
-                    Ok(Some(self.make_token(TokenType::LessEqual)))
-                } else {
-                    Ok(Some(self.make_token(TokenType::Less)))
-                }
-            }
-            '>' => {
-                if self.match_char('=') {
-                    Ok(Some(self.make_token(TokenType::GreaterEqual)))
-                } else {
-                    Ok(Some(self.make_token(TokenType::Greater)))
-                }
-            }
-            '&' => {
-                if self.match_char('&') {
-                    Ok(Some(self.make_token(TokenType::AndAnd)))
-                } else {
-                    Err(LexError::InvalidCharacter {
-                        character: c,
-                        position: self.current - 1,
-                    })
-                }
-            }
-            '|' => {
-                if self.match_char('|') {
-                    Ok(Some(self.make_token(TokenType::OrOr)))
-                } else {
-                    Err(LexError::InvalidCharacter {
-                        character: c,
-                        position: self.current - 1,
-                    })
-                }
+            // Newlines end rule text and reset state
+            '\n' => {
+                self.in_rule_text = false;
+                Ok(Some(self.make_token(TokenType::Newline)))
             }
 
-            // String literals
-            '"' => self.string(),
+            // Colon transitions us into rule text mode
+            ':' if !self.in_rule_text => {
+                self.in_rule_text = true;
+                Ok(Some(self.make_token(TokenType::Colon)))
+            }
 
-            // Numbers
-            c if c.is_ascii_digit() => self.number(),
+            // Numbers (positive floating point only) - only when not in rule text
+            c if c.is_ascii_digit() && !self.in_rule_text => self.number(),
 
-            // Identifiers and keywords
-            c if c.is_alphabetic() || c == '_' => self.identifier(),
+            // Everything else when in rule text mode
+            _ if self.in_rule_text => {
+                // Backtrack and collect rule text
+                self.current -= 1;
+                self.rule_text()
+            }
 
             _ => Err(LexError::InvalidCharacter {
                 character: c,
@@ -206,66 +123,8 @@ impl Lexer {
         }
     }
 
-    fn string(&mut self) -> LexResult<Option<Token>> {
-        let mut value = String::new();
-
-        while self.peek() != '"' && !self.is_at_end() {
-            if self.peek() == '\n' {
-                // Allow multiline strings
-            }
-
-            if self.peek() == '\\' {
-                self.advance(); // consume backslash
-                match self.peek() {
-                    'n' => {
-                        value.push('\n');
-                        self.advance();
-                    }
-                    't' => {
-                        value.push('\t');
-                        self.advance();
-                    }
-                    'r' => {
-                        value.push('\r');
-                        self.advance();
-                    }
-                    '\\' => {
-                        value.push('\\');
-                        self.advance();
-                    }
-                    '"' => {
-                        value.push('"');
-                        self.advance();
-                    }
-                    c => {
-                        return Err(LexError::InvalidEscape {
-                            sequence: c,
-                            position: self.current,
-                        });
-                    }
-                }
-            } else {
-                value.push(self.advance());
-            }
-        }
-
-        if self.is_at_end() {
-            return Err(LexError::UnterminatedString {
-                position: self.start,
-            });
-        }
-
-        // Consume closing quote
-        self.advance();
-
-        Ok(Some(Token::new(
-            TokenType::String(value),
-            self.lexeme(),
-            Span::new(self.start, self.current),
-        )))
-    }
-
     fn number(&mut self) -> LexResult<Option<Token>> {
+        // Parse integer part
         while self.peek().is_ascii_digit() {
             self.advance();
         }
@@ -286,6 +145,13 @@ impl Lexer {
                 position: self.start,
             })?;
 
+        // Ensure it's positive
+        if value <= 0.0 {
+            return Err(LexError::InvalidNumber {
+                position: self.start,
+            });
+        }
+
         Ok(Some(Token::new(
             TokenType::Number(value),
             self.lexeme(),
@@ -293,44 +159,36 @@ impl Lexer {
         )))
     }
 
-    fn identifier(&mut self) -> LexResult<Option<Token>> {
-        while self.peek().is_alphanumeric() || self.peek() == '_' {
+    fn rule_text(&mut self) -> LexResult<Option<Token>> {
+        // Skip leading whitespace
+        while !self.is_at_end() && (self.peek() == ' ' || self.peek() == '\t') {
             self.advance();
         }
 
-        let text = self.lexeme();
-        let token_type = match text.as_str() {
-            "true" => TokenType::True,
-            "false" => TokenType::False,
-            "null" => TokenType::Null,
-            "let" => TokenType::Let,
-            "if" => TokenType::If,
-            "else" => TokenType::Else,
-            "while" => TokenType::While,
-            "return" => TokenType::Return,
-            "function" => TokenType::Function,
-            _ => TokenType::Identifier(text.clone()),
-        };
+        self.start = self.current; // Reset start after skipping whitespace
+
+        // Collect everything until newline or EOF
+        while !self.is_at_end() && self.peek() != '\n' {
+            self.advance();
+        }
+
+        let text = self.lexeme().trim_end().to_string();
+
+        if text.is_empty() {
+            return Ok(None); // Skip empty rule text
+        }
 
         Ok(Some(Token::new(
-            token_type,
+            TokenType::RuleText(text.clone()),
             text,
             Span::new(self.start, self.current),
         )))
     }
 
+    // Helper methods
     fn advance(&mut self) -> char {
         self.current += 1;
         self.input[self.current - 1]
-    }
-
-    fn match_char(&mut self, expected: char) -> bool {
-        if self.is_at_end() || self.input[self.current] != expected {
-            false
-        } else {
-            self.current += 1;
-            true
-        }
     }
 
     fn peek(&self) -> char {
@@ -370,40 +228,8 @@ impl fmt::Display for TokenType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             TokenType::Number(n) => write!(f, "{}", n),
-            TokenType::String(s) => write!(f, "\"{}\"", s),
-            TokenType::Identifier(name) => write!(f, "{}", name),
-            TokenType::True => write!(f, "true"),
-            TokenType::False => write!(f, "false"),
-            TokenType::Null => write!(f, "null"),
-            TokenType::Let => write!(f, "let"),
-            TokenType::If => write!(f, "if"),
-            TokenType::Else => write!(f, "else"),
-            TokenType::While => write!(f, "while"),
-            TokenType::Return => write!(f, "return"),
-            TokenType::Function => write!(f, "function"),
-            TokenType::Plus => write!(f, "+"),
-            TokenType::Minus => write!(f, "-"),
-            TokenType::Star => write!(f, "*"),
-            TokenType::Slash => write!(f, "/"),
-            TokenType::Percent => write!(f, "%"),
-            TokenType::Bang => write!(f, "!"),
-            TokenType::BangEqual => write!(f, "!="),
-            TokenType::Equal => write!(f, "="),
-            TokenType::EqualEqual => write!(f, "=="),
-            TokenType::Greater => write!(f, ">"),
-            TokenType::GreaterEqual => write!(f, ">="),
-            TokenType::Less => write!(f, "<"),
-            TokenType::LessEqual => write!(f, "<="),
-            TokenType::AndAnd => write!(f, "&&"),
-            TokenType::OrOr => write!(f, "||"),
-            TokenType::LeftParen => write!(f, "("),
-            TokenType::RightParen => write!(f, ")"),
-            TokenType::LeftBrace => write!(f, "{{"),
-            TokenType::RightBrace => write!(f, "}}"),
-            TokenType::LeftBracket => write!(f, "["),
-            TokenType::RightBracket => write!(f, "]"),
-            TokenType::Comma => write!(f, ","),
-            TokenType::Semicolon => write!(f, ";"),
+            TokenType::Colon => write!(f, ":"),
+            TokenType::RuleText(text) => write!(f, "{}", text),
             TokenType::Newline => write!(f, "\\n"),
             TokenType::Eof => write!(f, "EOF"),
         }

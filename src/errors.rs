@@ -18,15 +18,6 @@ pub enum ParseError {
 
     #[error("Invalid number format at position {position}")]
     InvalidNumber { position: usize },
-
-    #[error("Unterminated string literal at position {position}")]
-    UnterminatedString { position: usize },
-
-    #[error("Invalid escape sequence '\\{sequence}' at position {position}")]
-    InvalidEscape { sequence: char, position: usize },
-
-    #[error("General syntax error: {message} at position {position}")]
-    SyntaxError { message: String, position: usize },
 }
 
 /// Represents errors that can occur during lexical analysis
@@ -37,12 +28,6 @@ pub enum LexError {
 
     #[error("Invalid number format at position {position}")]
     InvalidNumber { position: usize },
-
-    #[error("Unterminated string literal at position {position}")]
-    UnterminatedString { position: usize },
-
-    #[error("Invalid escape sequence '\\{sequence}' at position {position}")]
-    InvalidEscape { sequence: char, position: usize },
 }
 
 /// Result type for parsing operations
@@ -62,12 +47,6 @@ impl From<LexError> for ParseError {
                 position,
             },
             LexError::InvalidNumber { position } => ParseError::InvalidNumber { position },
-            LexError::UnterminatedString { position } => {
-                ParseError::UnterminatedString { position }
-            }
-            LexError::InvalidEscape { sequence, position } => {
-                ParseError::InvalidEscape { sequence, position }
-            }
         }
     }
 }
