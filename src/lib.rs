@@ -6,7 +6,7 @@ pub mod errors;
 pub mod lexer;
 pub mod parser;
 
-pub use ast::{Node, Program, Rule, Span, Table, TableMetadata};
+pub use ast::{Expression, Node, Program, Rule, RuleContent, Span, Table, TableMetadata};
 pub use diagnostic::{Diagnostic, DiagnosticKind, Severity, SourceLocation};
 pub use diagnostic_collector::DiagnosticCollector;
 pub use diagnostic_formatter::DiagnosticFormatter;
@@ -74,10 +74,10 @@ mod tests {
         let program = result.unwrap();
         assert_eq!(program.tables.len(), 1);
         assert_eq!(program.tables[0].value.metadata.id, "shape");
-        assert_eq!(program.tables[0].value.metadata.export, false);
+        assert!(!program.tables[0].value.metadata.export);
         assert_eq!(program.tables[0].value.rules.len(), 1);
         assert_eq!(program.tables[0].value.rules[0].value.weight, 1.5);
-        assert_eq!(program.tables[0].value.rules[0].value.text, "simple rule");
+        assert_eq!(program.tables[0].value.rules[0].value.content_text(), "simple rule");
     }
 
     #[test]
@@ -88,7 +88,7 @@ mod tests {
         let program = result.unwrap();
         assert_eq!(program.tables.len(), 1);
         assert_eq!(program.tables[0].value.metadata.id, "shape");
-        assert_eq!(program.tables[0].value.metadata.export, true);
+        assert!(program.tables[0].value.metadata.export);
         assert_eq!(program.tables[0].value.rules.len(), 2);
     }
 
@@ -108,12 +108,12 @@ mod tests {
 
         // First table
         assert_eq!(program.tables[0].value.metadata.id, "shapes");
-        assert_eq!(program.tables[0].value.metadata.export, false);
+        assert!(!program.tables[0].value.metadata.export);
         assert_eq!(program.tables[0].value.rules.len(), 2);
 
         // Second table
         assert_eq!(program.tables[1].value.metadata.id, "colors");
-        assert_eq!(program.tables[1].value.metadata.export, true);
+        assert!(program.tables[1].value.metadata.export);
         assert_eq!(program.tables[1].value.rules.len(), 2);
     }
 
@@ -157,8 +157,78 @@ mod tests {
         assert_eq!(program.tables.len(), 1);
         assert_eq!(program.tables[0].value.rules.len(), 1);
         assert_eq!(
-            program.tables[0].value.rules[0].value.text,
+            program.tables[0].value.rules[0].value.content_text(),
             "rule with multiple   spaces"
         );
+    }
+
+    #[test]
+    fn test_table_reference_expressions() {
+        let source = r#"#color
+1.0: red
+2.0: blue
+3.0: green
+
+#shape
+1.0: circle
+2.0: square
+
+#item
+1.0: {#color} {#shape}
+2.0: big {#color} {#shape}
+3.0: small {#shape}"#;
+
+        let result = parse(source);
+        assert!(result.is_ok());
+        let program = result.unwrap();
+        assert_eq!(program.tables.len(), 3);
+
+        // Color table
+        assert_eq!(program.tables[0].value.metadata.id, "color");
+        assert_eq!(program.tables[0].value.rules.len(), 3);
+
+        // Shape table
+        assert_eq!(program.tables[1].value.metadata.id, "shape");
+        assert_eq!(program.tables[1].value.rules.len(), 2);
+
+        // Item table with expressions
+        assert_eq!(program.tables[2].value.metadata.id, "item");
+        assert_eq!(program.tables[2].value.rules.len(), 3);
+
+        // Check the first rule: "1.0: {#color} {#shape}"
+        let rule1 = &program.tables[2].value.rules[0].value;
+        assert_eq!(rule1.weight, 1.0);
+        assert_eq!(rule1.content.len(), 4); // space, {#color}, space, {#shape}
+        match &rule1.content[0] {
+            RuleContent::Text(text) => assert_eq!(text, " "),
+            _ => panic!("Expected text content"),
+        }
+        match &rule1.content[1] {
+            RuleContent::Expression(Expression::TableReference { table_id }) => {
+                assert_eq!(table_id, "color");
+            }
+            _ => panic!("Expected table reference expression"),
+        }
+        match &rule1.content[2] {
+            RuleContent::Text(text) => assert_eq!(text, " "),
+            _ => panic!("Expected text content"),
+        }
+        match &rule1.content[3] {
+            RuleContent::Expression(Expression::TableReference { table_id }) => {
+                assert_eq!(table_id, "shape");
+            }
+            _ => panic!("Expected table reference expression"),
+        }
+
+        // Check content_text() works correctly for expressions
+        assert_eq!(rule1.content_text(), "{#color} {#shape}");
+
+        // Check the second rule: "2.0: big {#color} {#shape}"
+        let rule2 = &program.tables[2].value.rules[1].value;
+        assert_eq!(rule2.content_text(), "big {#color} {#shape}");
+
+        // Check the third rule: "3.0: small {#shape}"
+        let rule3 = &program.tables[2].value.rules[2].value;
+        assert_eq!(rule3.content_text(), "small {#shape}");
     }
 }

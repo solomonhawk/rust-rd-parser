@@ -187,35 +187,8 @@ impl Parser {
         // Expect a colon
         self.consume(&TokenType::Colon, "Expected ':' after weight")?;
 
-        // Expect rule text
-        let text = if let TokenType::RuleText(text) = &self.advance().token_type {
-            text.clone()
-        } else {
-            let token = self.previous();
-            let suggestion = match &token.token_type {
-                TokenType::Newline => Some("Missing rule text after colon. Add some text describing the rule".to_string()),
-                TokenType::Eof => Some("File ended after colon. Add rule text like 'some rule description'".to_string()),
-                TokenType::Number(_) => Some("Found another number when expecting rule text. Each rule should have format 'weight: text'".to_string()),
-                _ => Some("Expected rule text after the colon".to_string()),
-            };
-
-            let diagnostic = self
-                .diagnostic_collector
-                .parse_error(
-                    token.span.start,
-                    format!(
-                        "Expected rule text after colon, but found {}",
-                        token.token_type
-                    ),
-                )
-                .with_suggestion(suggestion.unwrap());
-
-            return Err(ParseError::UnexpectedToken {
-                expected: "rule text after colon".to_string(),
-                found: format!("{}", token.token_type),
-                diagnostic: Box::new(diagnostic),
-            });
-        };
+        // Parse rule content (text segments and expressions)
+        let content = self.parse_rule_content()?;
 
         // Optional newline
         if self.check(&TokenType::Newline) {
@@ -223,9 +196,111 @@ impl Parser {
         }
 
         let end_pos = self.previous().span.end;
-        let rule = Rule { weight, text };
+        let rule = Rule::new(weight, content);
 
         Ok(Node::new(rule, Span::new(start_pos, end_pos)))
+    }
+    /// Parses rule content: a sequence of text segments and expressions
+    fn parse_rule_content(&mut self) -> ParseResult<Vec<crate::ast::RuleContent>> {
+        use crate::ast::RuleContent;
+
+        let mut content = Vec::new();
+
+        // Parse until we hit a newline or end of file
+        while !self.is_at_end() && !self.check(&TokenType::Newline) && !self.check(&TokenType::Hash)
+        {
+            if self.check(&TokenType::TextSegment("".to_string())) {
+                if let TokenType::TextSegment(text) = &self.advance().token_type {
+                    content.push(RuleContent::Text(text.clone()));
+                }
+            } else if self.check(&TokenType::LeftBrace) {
+                // Parse expression
+                let expr = self.parse_expression()?;
+                content.push(RuleContent::Expression(expr));
+            } else if self.check(&TokenType::RuleText("".to_string())) {
+                // Backward compatibility: if we encounter old-style RuleText, treat as text
+                if let TokenType::RuleText(text) = &self.advance().token_type {
+                    content.push(RuleContent::Text(text.clone()));
+                }
+            } else {
+                // Unexpected token in rule content
+                let token = self.peek();
+                let diagnostic = self
+                    .diagnostic_collector
+                    .parse_error(
+                        token.span.start,
+                        format!("Unexpected token in rule content: {}", token.token_type),
+                    )
+                    .with_suggestion(
+                        "Rule content should be text or expressions like {#table}".to_string(),
+                    );
+
+                return Err(ParseError::UnexpectedToken {
+                    expected: "rule content".to_string(),
+                    found: format!("{}", token.token_type),
+                    diagnostic: Box::new(diagnostic),
+                });
+            }
+        }
+
+        // If no content was parsed, it's an error
+        if content.is_empty() {
+            let token = self.peek();
+            let diagnostic = self
+                .diagnostic_collector
+                .parse_error(
+                    token.span.start,
+                    "Missing rule content after colon".to_string(),
+                )
+                .with_suggestion("Add some text or expressions after the colon".to_string());
+
+            return Err(ParseError::UnexpectedToken {
+                expected: "rule content".to_string(),
+                found: format!("{}", token.token_type),
+                diagnostic: Box::new(diagnostic),
+            });
+        }
+
+        Ok(content)
+    }
+
+    /// Parses an expression within curly braces
+    fn parse_expression(&mut self) -> ParseResult<crate::ast::Expression> {
+        use crate::ast::Expression;
+
+        // Consume '{'
+        self.consume(&TokenType::LeftBrace, "Expected '{' to start expression")?;
+
+        // Expect '#' for table reference
+        self.consume(&TokenType::Hash, "Expected '#' for table reference")?;
+
+        // Expect table identifier
+        let table_id = if let TokenType::Identifier(name) = &self.advance().token_type {
+            name.clone()
+        } else {
+            let token = self.previous();
+            let diagnostic = self
+                .diagnostic_collector
+                .parse_error(
+                    token.span.start,
+                    format!(
+                        "Expected table identifier after '#', but found {}",
+                        token.token_type
+                    ),
+                )
+                .with_suggestion("Table references should look like {#table_name}".to_string());
+
+            return Err(ParseError::UnexpectedToken {
+                expected: "table identifier".to_string(),
+                found: format!("{}", token.token_type),
+                diagnostic: Box::new(diagnostic),
+            });
+        };
+
+        // Consume '}'
+        self.consume(&TokenType::RightBrace, "Expected '}' to close expression")?;
+
+        Ok(Expression::TableReference { table_id })
     }
 
     // Utility methods

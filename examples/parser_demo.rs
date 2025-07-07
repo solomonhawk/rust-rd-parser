@@ -20,6 +20,9 @@ pub fn main() {
 3.0: blue"#, "Multiple tables"),
         ("#test\n0.001: very small weight", "Small weight"),
         ("#test\n999.999: very large weight", "Large weight"),
+        ("#test\n1.0: {#color}", "Simple table reference expression"),
+        ("#item\n1: {#color} {#shape}", "Multiple table references"),
+        ("#test\n1.0: prefix {#table} suffix", "Mixed content with expression"),
     ];
 
     println!("✅ SUCCESSFUL PARSING EXAMPLES");
@@ -41,7 +44,7 @@ pub fn main() {
                         table.value.rules.len()
                     );
                     for (j, rule) in table.value.rules.iter().enumerate() {
-                        println!("     Rule {}: weight={}, text=\"{}\"", j + 1, rule.value.weight, rule.value.text);
+                        println!("     Rule {}: weight={}, text=\"{}\"", j + 1, rule.value.weight, rule.value.to_string());
                     }
                 }
             }

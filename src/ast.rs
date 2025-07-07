@@ -39,12 +39,62 @@ impl<T> Node<T> {
     }
 }
 
-/// A single rule in our language: weight: rule_text
+/// Expression that can appear within rule text
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum Expression {
+    /// Reference to another table by ID
+    TableReference { table_id: String },
+    // Future: could add other expression types like variables, functions, etc.
+}
+
+/// A piece of rule text content - either literal text or an expression
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum RuleContent {
+    /// Literal text content
+    Text(String),
+    /// An expression to be evaluated
+    Expression(Expression),
+}
+
+/// A single rule in our language: weight: rule_content_list
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Rule {
     pub weight: f64,
-    pub text: String,
+    pub content: Vec<RuleContent>,
+}
+
+impl Rule {
+    /// Create a new rule with text content (for backward compatibility)
+    pub fn new_text(weight: f64, text: String) -> Self {
+        Self {
+            weight,
+            content: vec![RuleContent::Text(text)],
+        }
+    }
+
+    /// Create a new rule with mixed content
+    pub fn new(weight: f64, content: Vec<RuleContent>) -> Self {
+        Self { weight, content }
+    }
+
+    /// Get just the content text without weight and colon (for backward compatibility)
+    pub fn content_text(&self) -> String {
+        self.content
+            .iter()
+            .map(|c| match c {
+                RuleContent::Text(text) => text.clone(),
+                RuleContent::Expression(Expression::TableReference { table_id }) => {
+                    format!("{{#{}}}", table_id)
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("")
+            .trim()
+            .to_string()
+    }
 }
 
 /// Table metadata containing id and optional flags
@@ -95,6 +145,17 @@ impl Program {
 
 impl fmt::Display for Rule {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}: {}", self.weight, self.text)
+        let content_str = self
+            .content
+            .iter()
+            .map(|c| match c {
+                RuleContent::Text(text) => text.clone(),
+                RuleContent::Expression(Expression::TableReference { table_id }) => {
+                    format!("{{#{}}}", table_id)
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("");
+        write!(f, "{}: {}", self.weight, content_str)
     }
 }

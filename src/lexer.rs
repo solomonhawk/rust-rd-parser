@@ -19,6 +19,9 @@ pub enum TokenType {
     /// Rule text (everything after the colon until newline)
     RuleText(String),
 
+    /// Text segment within rule content (between expressions)
+    TextSegment(String),
+
     /// Hash symbol '#' for table declarations
     Hash,
 
@@ -30,6 +33,12 @@ pub enum TokenType {
 
     /// Right bracket ']'
     RightBracket,
+
+    /// Left curly brace '{'
+    LeftBrace,
+
+    /// Right curly brace '}'
+    RightBrace,
 
     /// Export keyword
     Export,
@@ -66,6 +75,7 @@ pub struct Lexer {
     current: usize,
     start: usize,
     in_rule_text: bool,
+    in_expression: bool,
     diagnostic_collector: DiagnosticCollector,
 }
 
@@ -77,6 +87,7 @@ impl Lexer {
             current: 0,
             start: 0,
             in_rule_text: false,
+            in_expression: false,
             diagnostic_collector: DiagnosticCollector::new(input.to_string()),
         }
     }
@@ -118,8 +129,10 @@ impl Lexer {
                 Ok(Some(self.make_token(TokenType::Newline)))
             }
 
-            // Hash symbol for table declarations
-            '#' if !self.in_rule_text => Ok(Some(self.make_token(TokenType::Hash))),
+            // Hash symbol for table declarations or expressions
+            '#' if !self.in_rule_text || self.in_expression => {
+                Ok(Some(self.make_token(TokenType::Hash)))
+            }
 
             // Left bracket for flags
             '[' if !self.in_rule_text => Ok(Some(self.make_token(TokenType::LeftBracket))),
@@ -127,7 +140,19 @@ impl Lexer {
             // Right bracket for flags
             ']' if !self.in_rule_text => Ok(Some(self.make_token(TokenType::RightBracket))),
 
-            // Colon transitions us into rule text mode
+            // Left brace for expressions (can appear in rule text)
+            '{' => {
+                self.in_expression = true;
+                Ok(Some(self.make_token(TokenType::LeftBrace)))
+            }
+
+            // Right brace for expressions (can appear in rule text)
+            '}' => {
+                self.in_expression = false;
+                Ok(Some(self.make_token(TokenType::RightBrace)))
+            }
+
+            // Colon transitions us into rule content mode
             ':' if !self.in_rule_text => {
                 self.in_rule_text = true;
                 Ok(Some(self.make_token(TokenType::Colon)))
@@ -136,14 +161,16 @@ impl Lexer {
             // Numbers (positive floating point only) - only when not in rule text
             c if c.is_ascii_digit() && !self.in_rule_text => self.number(),
 
-            // Identifiers (table names and keywords) - only when not in rule text
-            c if c.is_alphabetic() && !self.in_rule_text => self.identifier(),
+            // Identifiers (table names and keywords) - allowed outside rule text or inside expressions
+            c if c.is_alphabetic() && (!self.in_rule_text || self.in_expression) => {
+                self.identifier()
+            }
 
-            // Everything else when in rule text mode
-            _ if self.in_rule_text => {
-                // Backtrack and collect rule text
+            // Text content when in rule text mode but not in expression
+            _ if self.in_rule_text && !self.in_expression && c != '{' && c != '}' && c != '\n' => {
+                // Backtrack and collect text segment
                 self.current -= 1;
-                self.rule_text()
+                self.text_segment()
             }
 
             _ => {
@@ -225,32 +252,6 @@ impl Lexer {
         )))
     }
 
-    fn rule_text(&mut self) -> LexResult<Option<Token>> {
-        // Skip leading whitespace
-        while !self.is_at_end() && (self.peek() == ' ' || self.peek() == '\t') {
-            self.advance();
-        }
-
-        self.start = self.current; // Reset start after skipping whitespace
-
-        // Collect everything until newline or EOF
-        while !self.is_at_end() && self.peek() != '\n' {
-            self.advance();
-        }
-
-        let text = self.lexeme().trim_end().to_string();
-
-        if text.is_empty() {
-            return Ok(None); // Skip empty rule text
-        }
-
-        Ok(Some(Token::new(
-            TokenType::RuleText(text.clone()),
-            text,
-            Span::new(self.start, self.current),
-        )))
-    }
-
     fn identifier(&mut self) -> LexResult<Option<Token>> {
         // Collect alphanumeric characters and underscores
         while !self.is_at_end() && (self.peek().is_alphanumeric() || self.peek() == '_') {
@@ -266,6 +267,26 @@ impl Lexer {
         Ok(Some(Token::new(
             token_type,
             text,
+            Span::new(self.start, self.current),
+        )))
+    }
+
+    fn text_segment(&mut self) -> LexResult<Option<Token>> {
+        // Don't skip whitespace - we want to preserve spaces between expressions
+        // Collect text until we hit a brace, newline, or EOF
+        while !self.is_at_end() && self.peek() != '{' && self.peek() != '}' && self.peek() != '\n' {
+            self.advance();
+        }
+
+        let text = self.lexeme();
+
+        if text.is_empty() {
+            return Ok(None); // Skip empty text segments
+        }
+
+        Ok(Some(Token::new(
+            TokenType::TextSegment(text.clone()),
+            text.clone(),
             Span::new(self.start, self.current),
         )))
     }
@@ -315,10 +336,13 @@ impl fmt::Display for TokenType {
             TokenType::Number(n) => write!(f, "{}", n),
             TokenType::Colon => write!(f, ":"),
             TokenType::RuleText(text) => write!(f, "{}", text),
+            TokenType::TextSegment(text) => write!(f, "{}", text),
             TokenType::Hash => write!(f, "#"),
             TokenType::Identifier(name) => write!(f, "{}", name),
             TokenType::LeftBracket => write!(f, "["),
             TokenType::RightBracket => write!(f, "]"),
+            TokenType::LeftBrace => write!(f, "{{"),
+            TokenType::RightBrace => write!(f, "}}"),
             TokenType::Export => write!(f, "export"),
             TokenType::Newline => write!(f, "\\n"),
             TokenType::Eof => write!(f, "EOF"),
