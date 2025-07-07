@@ -1,0 +1,17 @@
+#animal[export]
+1.0: cat
+1.0: dog
+1.0: bird
+
+#item
+1.0: {#animal|indefinite}
+2.0: {#animal|definite}
+3.0: {#animal|capitalize}
+4.0: {#animal|uppercase}
+5.0: {#animal|lowercase}
+6.0: {#animal|indefinite|capitalize}
+
+#complex_item
+1.0: You see {#animal|indefinite} walking
+2.0: {#animal|definite|capitalize} looks at you
+3.0: A {#animal|uppercase} appears!

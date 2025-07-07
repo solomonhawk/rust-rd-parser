@@ -125,7 +125,21 @@
             "0": {
               "name": "punctuation.definition.expression.end.tbl"
             }
-          }
+          },
+          "patterns": [
+            {
+              "name": "meta.modifier.tbl",
+              "match": "(\\|)(indefinite|definite|capitalize|uppercase|lowercase)",
+              "captures": {
+                "1": {
+                  "name": "punctuation.separator.modifier.tbl"
+                },
+                "2": {
+                  "name": "keyword.modifier.tbl"
+                }
+              }
+            }
+          ]
         },
         {
           "name": "meta.expression.dice-roll.tbl",

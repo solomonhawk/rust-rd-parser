@@ -38,9 +38,13 @@ pub fn main() {
                                     println!("        [{}] Text: {:?}", i, text);
                                 }
                                 table_collection::RuleContent::Expression(
-                                    table_collection::Expression::TableReference { table_id },
+                                    table_collection::Expression::TableReference { table_id, modifiers },
                                 ) => {
-                                    println!("        [{}] Table Reference: {{#{}}}", i, table_id);
+                                    if modifiers.is_empty() {
+                                        println!("        [{}] Table Reference: {{#{}}}", i, table_id);
+                                    } else {
+                                        println!("        [{}] Table Reference with modifiers: {{#{}|{}}}", i, table_id, modifiers.join("|"));
+                                    }
                                 }
                                 table_collection::RuleContent::Expression(
                                     table_collection::Expression::DiceRoll { count, sides },

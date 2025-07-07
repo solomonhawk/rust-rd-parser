@@ -299,10 +299,46 @@ impl Parser {
                 });
             };
 
+            // Parse optional modifiers
+            let mut modifiers = Vec::new();
+
+            while self.check(&TokenType::Pipe) {
+                self.advance(); // consume '|'
+
+                // Expect a modifier keyword or identifier
+                match &self.advance().token_type {
+                    TokenType::Modifier(modifier) => {
+                        modifiers.push(modifier.clone());
+                    }
+                    _ => {
+                        let token = self.previous();
+                        let diagnostic = self
+                            .diagnostic_collector
+                            .parse_error(
+                                token.span.start,
+                                format!(
+                                    "Expected modifier after '|', but found {}",
+                                    token.token_type
+                                ),
+                            )
+                            .with_suggestion("Valid modifiers are: indefinite, definite, capitalize, uppercase, lowercase".to_string());
+
+                        return Err(ParseError::UnexpectedToken {
+                            expected: "modifier keyword".to_string(),
+                            found: format!("{}", token.token_type),
+                            diagnostic: Box::new(diagnostic),
+                        });
+                    }
+                }
+            }
+
             // Consume '}'
             self.consume(&TokenType::RightBrace, "Expected '}' to close expression")?;
 
-            Ok(Expression::TableReference { table_id })
+            Ok(Expression::TableReference {
+                table_id,
+                modifiers,
+            })
         } else if let TokenType::DiceRoll { count, sides } = &self.peek().token_type {
             // Dice roll expression: {d6} or {2d10}
             let count = *count;

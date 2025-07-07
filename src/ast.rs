@@ -43,8 +43,11 @@ impl<T> Node<T> {
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Expression {
-    /// Reference to another table by ID
-    TableReference { table_id: String },
+    /// Reference to another table by ID with optional modifiers
+    TableReference {
+        table_id: String,
+        modifiers: Vec<String>,
+    },
     /// Dice roll expression like "d6", "2d10", "100d20"
     DiceRoll { count: Option<u32>, sides: u32 },
 }
@@ -87,8 +90,15 @@ impl Rule {
             .iter()
             .map(|c| match c {
                 RuleContent::Text(text) => text.clone(),
-                RuleContent::Expression(Expression::TableReference { table_id }) => {
-                    format!("{{#{}}}", table_id)
+                RuleContent::Expression(Expression::TableReference {
+                    table_id,
+                    modifiers,
+                }) => {
+                    if modifiers.is_empty() {
+                        format!("{{#{}}}", table_id)
+                    } else {
+                        format!("{{#{}|{}}}", table_id, modifiers.join("|"))
+                    }
                 }
                 RuleContent::Expression(Expression::DiceRoll { count, sides }) => match count {
                     Some(c) => format!("{{{}d{}}}", c, sides),
@@ -155,8 +165,15 @@ impl fmt::Display for Rule {
             .iter()
             .map(|c| match c {
                 RuleContent::Text(text) => text.clone(),
-                RuleContent::Expression(Expression::TableReference { table_id }) => {
-                    format!("{{#{}}}", table_id)
+                RuleContent::Expression(Expression::TableReference {
+                    table_id,
+                    modifiers,
+                }) => {
+                    if modifiers.is_empty() {
+                        format!("{{#{}}}", table_id)
+                    } else {
+                        format!("{{#{}|{}}}", table_id, modifiers.join("|"))
+                    }
                 }
                 RuleContent::Expression(Expression::DiceRoll { count, sides }) => match count {
                     Some(c) => format!("{{{}d{}}}", c, sides),

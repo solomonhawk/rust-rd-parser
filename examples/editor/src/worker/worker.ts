@@ -4,7 +4,7 @@ import init, {
   WasmParser,
   WasmUtils,
   WasmCollection,
-} from "../../../../dist/pkg-web/table_collection.js";
+} from "../../public/wasm/table_collection.js";
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 declare const self: DedicatedWorkerGlobalScope;

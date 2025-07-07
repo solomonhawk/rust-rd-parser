@@ -110,7 +110,7 @@ function App() {
                 : diagnostic.severity === "warning"
                 ? monaco.MarkerSeverity.Warning
                 : monaco.MarkerSeverity.Info,
-            startLineNumber: diagnostic.line, // Monaco is 1-based
+            startLineNumber: diagnostic.line,
             startColumn: diagnostic.column,
             endLineNumber: diagnostic.endLine,
             endColumn: diagnostic.endColumn,

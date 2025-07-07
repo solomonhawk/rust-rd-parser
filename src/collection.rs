@@ -135,9 +135,15 @@ impl Collection {
                 RuleContent::Text(text) => {
                     result.push_str(text);
                 }
-                RuleContent::Expression(Expression::TableReference { table_id: ref_id }) => {
+                RuleContent::Expression(Expression::TableReference { table_id: ref_id, modifiers }) => {
                     // Recursively generate from the referenced table
-                    let generated = self.generate_single(ref_id)?;
+                    let mut generated = self.generate_single(ref_id)?;
+                    
+                    // Apply modifiers
+                    for modifier in modifiers {
+                        generated = self.apply_modifier(&generated, modifier);
+                    }
+                    
                     result.push_str(&generated);
                 }
                 RuleContent::Expression(Expression::DiceRoll { count, sides }) => {
@@ -155,6 +161,28 @@ impl Collection {
         Ok(result.trim().to_string())
     }
 
+    /// Apply a modifier to generated text
+    fn apply_modifier(&self, text: &str, modifier: &str) -> String {
+        match modifier {
+            "capitalize" => {
+                let mut chars: Vec<char> = text.chars().collect();
+                if let Some(first_char) = chars.get_mut(0) {
+                    *first_char = first_char.to_uppercase().next().unwrap_or(*first_char);
+                }
+                chars.into_iter().collect()
+            }
+            "uppercase" => text.to_uppercase(),
+            "lowercase" => text.to_lowercase(),
+            "indefinite" => {
+                let first_char = text.chars().next().unwrap_or(' ').to_lowercase().next().unwrap_or(' ');
+                let article = if "aeiou".contains(first_char) { "an" } else { "a" };
+                format!("{} {}", article, text)
+            }
+            "definite" => format!("the {}", text),
+            _ => text.to_string(), // Unknown modifier, return unchanged
+        }
+    }
+
     /// Validate that all table references point to existing tables
     fn validate_table_references(tables: &HashMap<String, Table>) -> CollectionResult<()> {
         for (table_id, table) in tables {
@@ -162,6 +190,7 @@ impl Collection {
                 for content in &rule.value.content {
                     if let RuleContent::Expression(Expression::TableReference {
                         table_id: ref_id,
+                        modifiers: _,
                     }) = content
                     {
                         if !tables.contains_key(ref_id) {

@@ -216,8 +216,9 @@ mod tests {
             _ => panic!("Expected text content"),
         }
         match &rule1.content[1] {
-            RuleContent::Expression(Expression::TableReference { table_id }) => {
+            RuleContent::Expression(Expression::TableReference { table_id, modifiers }) => {
                 assert_eq!(table_id, "color");
+                assert!(modifiers.is_empty());
             }
             _ => panic!("Expected table reference expression"),
         }
@@ -226,8 +227,9 @@ mod tests {
             _ => panic!("Expected text content"),
         }
         match &rule1.content[3] {
-            RuleContent::Expression(Expression::TableReference { table_id }) => {
+            RuleContent::Expression(Expression::TableReference { table_id, modifiers }) => {
                 assert_eq!(table_id, "shape");
+                assert!(modifiers.is_empty());
             }
             _ => panic!("Expected table reference expression"),
         }
@@ -526,8 +528,9 @@ mod tests {
         // Should have: text, table_ref, text, dice_roll, text
         assert_eq!(rule1.content.len(), 5);
         match &rule1.content[1] {
-            RuleContent::Expression(Expression::TableReference { table_id }) => {
+            RuleContent::Expression(Expression::TableReference { table_id, modifiers }) => {
                 assert_eq!(table_id, "color");
+                assert!(modifiers.is_empty());
             }
             _ => panic!("Expected table reference"),
         }
@@ -537,6 +540,129 @@ mod tests {
                 assert_eq!(*sides, 6);
             }
             _ => panic!("Expected dice roll"),
+        }
+    }
+
+    #[test]
+    fn test_table_reference_modifiers() {
+        let source = r#"#animal
+1.0: cat
+
+#test_modifiers
+1.0: {#animal|capitalize}
+1.0: {#animal|uppercase}
+1.0: {#animal|lowercase}
+1.0: {#animal|indefinite}
+1.0: {#animal|definite}
+1.0: {#animal|indefinite|capitalize}"#;
+
+        let result = parse(source);
+        assert!(result.is_ok(), "Should parse table references with modifiers");
+
+        let program = result.unwrap();
+        assert_eq!(program.tables.len(), 2);
+
+        // Test that modifiers are parsed correctly
+        let test_table = &program.tables[1].value;
+        assert_eq!(test_table.metadata.id, "test_modifiers");
+
+        // Check the first rule has capitalize modifier
+        let rule1 = &test_table.rules[0].value;
+        if let RuleContent::Expression(Expression::TableReference { table_id, modifiers }) = &rule1.content[1] {
+            assert_eq!(table_id, "animal");
+            assert_eq!(modifiers, &vec!["capitalize"]);
+        } else {
+            panic!("Expected table reference with modifiers");
+        }
+
+        // Check the last rule has multiple modifiers
+        let rule6 = &test_table.rules[5].value;
+        if let RuleContent::Expression(Expression::TableReference { table_id, modifiers }) = &rule6.content[1] {
+            assert_eq!(table_id, "animal");
+            assert_eq!(modifiers, &vec!["indefinite", "capitalize"]);
+        } else {
+            panic!("Expected table reference with multiple modifiers");
+        }
+
+        // Test collection generation with modifiers
+        let mut collection = Collection::new(source).unwrap();
+        
+        // Generate multiple times to test modifier application
+        for _ in 0..10 {
+            let result = collection.generate("test_modifiers", 1);
+            assert!(result.is_ok(), "Should generate with modifiers");
+            let generated = result.unwrap();
+            
+            // Should contain modified text based on the modifiers
+            assert!(!generated.is_empty(), "Generated text should not be empty");
+        }
+    }
+
+    #[test]
+    fn test_invalid_modifiers_rejected() {
+        let source = r#"#animal
+1.0: cat
+
+#test
+1.0: {#animal|invalidmodifier}"#;
+
+        let result = parse(source);
+        assert!(result.is_err(), "Should reject invalid modifiers");
+        
+        let error = result.unwrap_err();
+        let error_string = format!("{}", error);
+        assert!(error_string.contains("Expected modifier"), "Error should mention expected modifier");
+        assert!(error_string.contains("invalidmodifier"), "Error should mention the invalid modifier");
+    }
+
+    #[test]
+    fn test_modifier_application() {
+        let source = r#"#word
+1.0: apple
+
+#capitalize_test
+1.0: {#word|capitalize}
+
+#uppercase_test
+1.0: {#word|uppercase}
+
+#lowercase_test
+1.0: {#word|lowercase}
+
+#indefinite_test
+1.0: {#word|indefinite}
+
+#definite_test
+1.0: {#word|definite}"#;
+
+        let mut collection = Collection::new(source).unwrap();
+        
+        // Test each modifier type individually for consistency
+        for _ in 0..5 {
+            // Test capitalize
+            let result = collection.generate("capitalize_test", 1);
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), "Apple");
+            
+            // Test uppercase
+            let result = collection.generate("uppercase_test", 1);
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), "APPLE");
+            
+            // Test lowercase
+            let result = collection.generate("lowercase_test", 1);
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), "apple");
+            
+            // Test indefinite (should be "an apple" for vowel sound)
+            let result = collection.generate("indefinite_test", 1);
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), "an apple");
+            
+            // Test definite
+            let result = collection.generate("definite_test", 1);
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), "the apple");
         }
     }
 }

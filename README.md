@@ -22,6 +22,35 @@ Where:
 - `flags` are optional metadata (currently supports `export`)
 - `weight` is a positive floating point number
 - `rule` is text content until newline
+- Table references can include modifiers: `{#table|modifier1|modifier2}`
+
+### Table Reference Modifiers
+
+Table references support modifiers that transform the generated content:
+
+```
+#animal
+1.0: cat
+1.0: dog
+1.0: bird
+
+#item
+1.0: {#animal|indefinite}         // "a cat", "a dog", "an elephant"
+2.0: {#animal|definite}           // "the cat", "the dog", "the bird"
+3.0: {#animal|capitalize}         // "Cat", "Dog", "Bird"
+4.0: {#animal|uppercase}          // "CAT", "DOG", "BIRD"
+5.0: {#animal|lowercase}          // "cat", "dog", "bird"
+6.0: {#animal|indefinite|capitalize}  // "A cat", "A dog", "An elephant"
+```
+
+**Available Modifiers:**
+- `indefinite` - Adds "a" or "an" based on first letter
+- `definite` - Adds "the" prefix
+- `capitalize` - Capitalizes the first letter
+- `uppercase` - Converts to all uppercase
+- `lowercase` - Converts to all lowercase
+
+Modifiers can be chained using the pipe `|` separator and are applied in order.
 
 ## Key Features
 

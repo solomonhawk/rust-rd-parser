@@ -28,6 +28,9 @@ pub enum TokenType {
     /// Table identifier (after #)
     Identifier(String),
 
+    /// Modifier keyword for table references
+    Modifier(String),
+
     /// Dice roll expression (like "d6", "2d10")
     DiceRoll { count: Option<u32>, sides: u32 },
 
@@ -45,6 +48,9 @@ pub enum TokenType {
 
     /// Export keyword
     Export,
+
+    /// Pipe separator '|' for modifiers
+    Pipe,
 
     /// Newline character
     Newline,
@@ -184,6 +190,9 @@ impl Lexer {
                 Ok(Some(self.make_token(TokenType::RightBrace)))
             }
 
+            // Pipe separator for modifiers (only in expressions)
+            '|' if self.in_expression => Ok(Some(self.make_token(TokenType::Pipe))),
+
             // Colon transitions us into rule content mode
             ':' if !self.in_rule_text => {
                 self.in_rule_text = true;
@@ -308,6 +317,11 @@ impl Lexer {
         let text = self.lexeme();
         let token_type = match text.as_str() {
             "export" => TokenType::Export,
+            // Check if this is a known modifier keyword
+            "indefinite" | "definite" | "capitalize" | "uppercase" | "lowercase" => {
+                TokenType::Modifier(text.clone())
+            }
+            // All other identifiers (including unknown modifiers) become regular identifiers
             _ => TokenType::Identifier(text.clone()),
         };
 
@@ -590,6 +604,7 @@ impl fmt::Display for TokenType {
             TokenType::TextSegment(text) => write!(f, "{}", text),
             TokenType::Hash => write!(f, "#"),
             TokenType::Identifier(name) => write!(f, "{}", name),
+            TokenType::Modifier(name) => write!(f, "{}", name),
             TokenType::DiceRoll { count, sides } => match count {
                 Some(c) => write!(f, "{}d{}", c, sides),
                 None => write!(f, "d{}", sides),
@@ -599,6 +614,7 @@ impl fmt::Display for TokenType {
             TokenType::LeftBrace => write!(f, "{{"),
             TokenType::RightBrace => write!(f, "}}"),
             TokenType::Export => write!(f, "export"),
+            TokenType::Pipe => write!(f, "|"),
             TokenType::Newline => write!(f, "\\n"),
             TokenType::Eof => write!(f, "EOF"),
         }

@@ -73,8 +73,8 @@ export const tblLanguageTokens: monaco.languages.IMonarchLanguage = {
       // Dice roll expressions - simplified
       [/\{[0-9]*d[0-9]+\}/, "keyword.dice"],
 
-      // Table reference expressions - simplified
-      [/\{#[a-zA-Z_][a-zA-Z0-9_-]*\}/, "variable.table"],
+      // Table reference expressions - simplified (with modifiers)
+      [/\{#[a-zA-Z_][a-zA-Z0-9_-]*(\|[a-zA-Z]+)*\}/, "variable.table"],
 
       // Generic expressions (fallback)
       [/\{/, "delimiter", "@expression"],
@@ -106,8 +106,12 @@ export const tblLanguageTokens: monaco.languages.IMonarchLanguage = {
       // Dice rolls inside expressions
       [/([0-9]+)?(d)([0-9]+)/, "keyword.dice"],
 
-      // Table references inside expressions
+      // Table references inside expressions with optional modifiers
       [/(#)([a-zA-Z_][a-zA-Z0-9_-]*)/, "variable.table"],
+
+      // Modifier separators and keywords
+      [/\|/, "delimiter"],
+      [/(indefinite|definite|capitalize|uppercase|lowercase)/, "keyword"],
 
       [/[^}]+/, "string"],
       [/\}/, "delimiter", "@pop"],

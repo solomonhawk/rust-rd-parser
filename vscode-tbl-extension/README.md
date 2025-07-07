@@ -19,8 +19,32 @@ The TBL language supports:
 - **Rules**: `weight: rule text with {expressions}`
 - **Dice Rolls**: `{d6}`, `{2d10}`, `{100d20}`
 - **Table References**: `{#other_table}`
+- **Table Reference Modifiers**: `{#table|indefinite}`, `{#table|capitalize}`, `{#table|indefinite|capitalize}`
 - **Comments**: `// line comment` and `/* block comment */`
 - **Export Flags**: `#table[export]`
+
+### Table Reference Modifiers
+
+The TBL language supports modifiers that transform table reference output:
+
+```tbl
+#animal
+1.0: cat
+1.0: dog
+1.0: bird
+
+#description
+1.0: You see {#animal|indefinite}
+2.0: {#animal|definite|capitalize} approaches
+3.0: A wild {#animal|uppercase} appears!
+```
+
+**Available Modifiers:**
+- `indefinite` - Adds "a" or "an" prefix
+- `definite` - Adds "the" prefix
+- `capitalize` - Capitalizes first letter
+- `uppercase` - Converts to uppercase
+- `lowercase` - Converts to lowercase
 
 ## Example
 
