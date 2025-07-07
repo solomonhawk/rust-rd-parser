@@ -1,4 +1,4 @@
-use parser::parse;
+use table_collection::parse;
 
 pub fn main() {
     let source = r#"#color
@@ -34,11 +34,11 @@ pub fn main() {
                         println!("      Content breakdown:");
                         for (i, content) in rule.value.content.iter().enumerate() {
                             match content {
-                                parser::RuleContent::Text(text) => {
+                                table_collection::RuleContent::Text(text) => {
                                     println!("        [{}] Text: {:?}", i, text);
                                 }
-                                parser::RuleContent::Expression(
-                                    parser::Expression::TableReference { table_id },
+                                table_collection::RuleContent::Expression(
+                                    table_collection::Expression::TableReference { table_id },
                                 ) => {
                                     println!("        [{}] Expression: {{#{}}}", i, table_id);
                                 }

@@ -17,10 +17,11 @@ pub use diagnostic_collector::DiagnosticCollector;
 pub use diagnostic_formatter::DiagnosticFormatter;
 pub use errors::{LexError, LexResult, ParseError, ParseResult};
 pub use lexer::{Lexer, Token, TokenType};
-pub use parser::Parser;
 
 #[cfg(feature = "wasm")]
 pub use wasm::{WasmCollection, WasmParser, WasmUtils};
+
+use crate::parser::Parser;
 
 /// Parse source code into an AST
 ///
@@ -30,7 +31,7 @@ pub use wasm::{WasmCollection, WasmParser, WasmUtils};
 /// # Examples
 ///
 /// ```
-/// use parser::parse;
+/// use table_collection::parse;
 ///
 /// let source = "1.5: simple rule";
 /// match parse(source) {
@@ -53,7 +54,7 @@ pub fn parse(source: &str) -> ParseResult<Program> {
 /// # Examples
 ///
 /// ```
-/// use parser::tokenize;
+/// use table_collection::tokenize;
 ///
 /// let source = "1.5: test rule";
 /// match tokenize(source) {

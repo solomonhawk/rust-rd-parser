@@ -68,7 +68,7 @@ Source Code → Lexer/Parser → Diagnostic Data → Formatter → User Output
 ### Basic Parsing
 
 ```rust
-use parser::parse;
+use table_collection::parse;
 
 let source = r#"#shapes
 1.5: circle
@@ -92,7 +92,7 @@ match parse(source) {
 ### Advanced Diagnostic Usage
 
 ```rust
-use parser::{DiagnosticFormatter, DiagnosticCollector};
+use table_collection::{DiagnosticFormatter, DiagnosticCollector};
 
 // Custom formatting
 let formatter = DiagnosticFormatter::new()

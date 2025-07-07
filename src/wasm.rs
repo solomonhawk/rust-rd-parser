@@ -1,11 +1,11 @@
 //! WebAssembly bindings for the TBL parser and collection generator
 
-use crate::{Collection, CollectionError, parse};
+use crate::{Collection, parse};
 use wasm_bindgen::prelude::*;
 
 // Set up a custom panic hook for better error messages in WASM
 pub fn set_panic_hook() {
-    #[cfg(feature = "console_error_panic_hook")]
+    #[cfg(feature = "wasm")]
     console_error_panic_hook::set_once();
 }
 
@@ -127,7 +127,7 @@ mod wasm_tests {
         let source = r#"#test
 1.0: hello world"#;
 
-        let result = WasmParser::parse(source);
+        let result = Wasmtable_collection::parse(source);
         assert!(result.is_ok());
 
         let json = result.unwrap();

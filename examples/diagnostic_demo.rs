@@ -1,4 +1,4 @@
-use parser::{parse, DiagnosticFormatter, DiagnosticCollector};
+use table_collection::{DiagnosticCollector, DiagnosticFormatter, parse};
 
 fn main() {
     println!("🔧 Advanced Diagnostic Usage Example");
@@ -22,18 +22,29 @@ fn main() {
         Err(e) => {
             // Extract the diagnostic from the error
             let diagnostic = match &e {
-                parser::ParseError::UnexpectedToken { diagnostic, .. } => diagnostic.as_ref(),
-                parser::ParseError::UnexpectedEof { diagnostic, .. } => diagnostic.as_ref(),
-                parser::ParseError::InvalidCharacter { diagnostic, .. } => diagnostic.as_ref(),
-                parser::ParseError::InvalidNumber { diagnostic, .. } => diagnostic.as_ref(),
+                table_collection::ParseError::UnexpectedToken { diagnostic, .. } => {
+                    diagnostic.as_ref()
+                }
+                table_collection::ParseError::UnexpectedEof { diagnostic, .. } => {
+                    diagnostic.as_ref()
+                }
+                table_collection::ParseError::InvalidCharacter { diagnostic, .. } => {
+                    diagnostic.as_ref()
+                }
+                table_collection::ParseError::InvalidNumber { diagnostic, .. } => {
+                    diagnostic.as_ref()
+                }
             };
-            
+
             // Use custom formatter
             let formatter = DiagnosticFormatter::new()
                 .with_colors(false)
                 .with_suggestions(false);
-            
-            println!("❌ Custom formatted error:\n{}", formatter.format(diagnostic));
+
+            println!(
+                "❌ Custom formatted error:\n{}",
+                formatter.format(diagnostic)
+            );
         }
     }
 
@@ -41,25 +52,31 @@ fn main() {
     println!("\n📝 Example 3: Manual diagnostic creation");
     let source3 = "#example\n1.0: first rule\n2.0: second rule";
     let collector = DiagnosticCollector::new(source3.to_string());
-    
+
     // Create a custom diagnostic
-    let custom_diagnostic = collector.parse_error(30, "This is a custom error message".to_string())
+    let custom_diagnostic = collector
+        .parse_error(30, "This is a custom error message".to_string())
         .with_suggestion("Try doing something different".to_string());
-    
+
     println!("🔧 Custom diagnostic:");
     println!("{}", custom_diagnostic);
 
     // Example 4: Multiple diagnostics formatting
     println!("\n📝 Example 4: Multiple diagnostics");
     let diagnostics = vec![
-        collector.lex_error(0, "First error".to_string())
+        collector
+            .lex_error(0, "First error".to_string())
             .with_suggestion("Fix the first issue".to_string()),
-        collector.parse_error(10, "Second error".to_string())
+        collector
+            .parse_error(10, "Second error".to_string())
             .with_suggestion("Fix the second issue".to_string()),
     ];
-    
+
     let formatter = DiagnosticFormatter::new();
-    println!("🔧 Multiple diagnostics:\n{}", formatter.format_multiple(&diagnostics));
+    println!(
+        "🔧 Multiple diagnostics:\n{}",
+        formatter.format_multiple(&diagnostics)
+    );
 
     println!("\n🎯 Key Benefits of the New Architecture:");
     println!("   • Clean separation between error collection and formatting");

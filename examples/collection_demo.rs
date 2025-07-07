@@ -1,4 +1,4 @@
-use parser::{Collection, CollectionError};
+use table_collection::{Collection, CollectionError};
 
 pub fn main() {
     let source = r#"#color
