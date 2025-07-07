@@ -47,6 +47,15 @@ pub fn main() {
                                     }
                                 }
                                 table_collection::RuleContent::Expression(
+                                    table_collection::Expression::ExternalTableReference { publisher, collection, table_id, modifiers },
+                                ) => {
+                                    if modifiers.is_empty() {
+                                        println!("        [{}] External Table Reference: {{@{}/{}#{}}}", i, publisher, collection, table_id);
+                                    } else {
+                                        println!("        [{}] External Table Reference with modifiers: {{@{}/{}#{}|{}}}", i, publisher, collection, table_id, modifiers.join("|"));
+                                    }
+                                }
+                                table_collection::RuleContent::Expression(
                                     table_collection::Expression::DiceRoll { count, sides },
                                 ) => {
                                     match count {

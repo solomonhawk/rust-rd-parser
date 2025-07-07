@@ -52,6 +52,12 @@ pub enum TokenType {
     /// Pipe separator '|' for modifiers
     Pipe,
 
+    /// At symbol '@' for external references
+    At,
+
+    /// Forward slash '/' for external references
+    Slash,
+
     /// Newline character
     Newline,
 
@@ -132,7 +138,7 @@ impl Lexer {
             // Skip spaces and tabs (except when in rule text)
             ' ' | '\t' if !self.in_rule_text => Ok(None),
 
-            // Handle comments
+            // Handle comments and forward slash
             '/' => {
                 if self.peek() == '/' {
                     // Line comment - consume until end of line
@@ -140,6 +146,9 @@ impl Lexer {
                 } else if self.peek() == '*' {
                     // Block comment - consume until */
                     self.block_comment()
+                } else if self.in_expression {
+                    // Forward slash in expression (for external references like @user/collection)
+                    Ok(Some(self.make_token(TokenType::Slash)))
                 } else if self.in_rule_text && !self.in_expression {
                     // Regular '/' character in rule text
                     self.current -= 1;
@@ -160,6 +169,9 @@ impl Lexer {
                     })
                 }
             }
+
+            // At symbol for external references (only in expressions)
+            '@' if self.in_expression => Ok(Some(self.make_token(TokenType::At))),
 
             // Newlines end rule text and reset state
             '\n' => {
@@ -615,6 +627,8 @@ impl fmt::Display for TokenType {
             TokenType::RightBrace => write!(f, "}}"),
             TokenType::Export => write!(f, "export"),
             TokenType::Pipe => write!(f, "|"),
+            TokenType::At => write!(f, "@"),
+            TokenType::Slash => write!(f, "/"),
             TokenType::Newline => write!(f, "\\n"),
             TokenType::Eof => write!(f, "EOF"),
         }

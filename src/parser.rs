@@ -298,71 +298,10 @@ impl Parser {
         // Check what kind of expression this is
         if self.check(&TokenType::Hash) {
             // Table reference: {#table_name}
-            self.advance(); // consume '#'
-
-            // Expect table identifier
-            let table_id = if let TokenType::Identifier(name) = &self.advance().token_type {
-                name.clone()
-            } else {
-                let token = self.previous();
-                let diagnostic = self
-                    .diagnostic_collector
-                    .parse_error(
-                        token.span.start,
-                        format!(
-                            "Expected table identifier after '#', but found {}",
-                            token.token_type
-                        ),
-                    )
-                    .with_suggestion("Table references should look like {#table_name}".to_string());
-
-                return Err(ParseError::UnexpectedToken {
-                    expected: "table identifier".to_string(),
-                    found: format!("{}", token.token_type),
-                    diagnostic: Box::new(diagnostic),
-                });
-            };
-
-            // Parse optional modifiers
-            let mut modifiers = Vec::new();
-
-            while self.check(&TokenType::Pipe) {
-                self.advance(); // consume '|'
-
-                // Expect a modifier keyword or identifier
-                match &self.advance().token_type {
-                    TokenType::Modifier(modifier) => {
-                        modifiers.push(modifier.clone());
-                    }
-                    _ => {
-                        let token = self.previous();
-                        let diagnostic = self
-                            .diagnostic_collector
-                            .parse_error(
-                                token.span.start,
-                                format!(
-                                    "Expected modifier after '|', but found {}",
-                                    token.token_type
-                                ),
-                            )
-                            .with_suggestion("Valid modifiers are: indefinite, definite, capitalize, uppercase, lowercase".to_string());
-
-                        return Err(ParseError::UnexpectedToken {
-                            expected: "modifier keyword".to_string(),
-                            found: format!("{}", token.token_type),
-                            diagnostic: Box::new(diagnostic),
-                        });
-                    }
-                }
-            }
-
-            // Consume '}'
-            self.consume(&TokenType::RightBrace, "Expected '}' to close expression")?;
-
-            Ok(Expression::TableReference {
-                table_id,
-                modifiers,
-            })
+            self.parse_table_reference()
+        } else if self.check(&TokenType::At) {
+            // External table reference: {@publisher/collection#table_name}
+            self.parse_external_table_reference()
         } else if let TokenType::DiceRoll { count, sides } = &self.peek().token_type {
             // Dice roll expression: {d6} or {2d10}
             let count = *count;
@@ -382,14 +321,187 @@ impl Parser {
                     token.span.start,
                     format!("Unexpected token in expression: {}", token.token_type),
                 )
-                .with_suggestion("Expressions should be table references like {#table} or dice rolls like {d6} or {2d10}".to_string());
+                .with_suggestion("Expressions should be table references like {#table}, external references like {@user/collection#table}, or dice rolls like {d6} or {2d10}".to_string());
 
             Err(ParseError::UnexpectedToken {
-                expected: "table reference or dice roll".to_string(),
+                expected: "table reference, external reference, or dice roll".to_string(),
                 found: format!("{}", token.token_type),
                 diagnostic: Box::new(diagnostic),
             })
         }
+    }
+
+    /// Parse a regular table reference: {#table_name|modifiers}
+    fn parse_table_reference(&mut self) -> ParseResult<crate::ast::Expression> {
+        use crate::ast::Expression;
+
+        self.advance(); // consume '#'
+
+        // Expect table identifier
+        let table_id = if let TokenType::Identifier(name) = &self.advance().token_type {
+            name.clone()
+        } else {
+            let token = self.previous();
+            let diagnostic = self
+                .diagnostic_collector
+                .parse_error(
+                    token.span.start,
+                    format!(
+                        "Expected table identifier after '#', but found {}",
+                        token.token_type
+                    ),
+                )
+                .with_suggestion("Table references should look like {#table_name}".to_string());
+
+            return Err(ParseError::UnexpectedToken {
+                expected: "table identifier".to_string(),
+                found: format!("{}", token.token_type),
+                diagnostic: Box::new(diagnostic),
+            });
+        };
+
+        // Parse optional modifiers
+        let modifiers = self.parse_modifiers()?;
+
+        // Consume '}'
+        self.consume(&TokenType::RightBrace, "Expected '}' to close expression")?;
+
+        Ok(Expression::TableReference {
+            table_id,
+            modifiers,
+        })
+    }
+
+    /// Parse an external table reference: {@publisher/collection#table_name|modifiers}
+    fn parse_external_table_reference(&mut self) -> ParseResult<crate::ast::Expression> {
+        use crate::ast::Expression;
+
+        self.advance(); // consume '@'
+
+        // Expect publisher identifier
+        let publisher = if let TokenType::Identifier(name) = &self.advance().token_type {
+            name.clone()
+        } else {
+            let token = self.previous();
+            let diagnostic = self
+                .diagnostic_collector
+                .parse_error(
+                    token.span.start,
+                    format!(
+                        "Expected publisher name after '@', but found {}",
+                        token.token_type
+                    ),
+                )
+                .with_suggestion("External references should look like {@publisher/collection#table}".to_string());
+
+            return Err(ParseError::UnexpectedToken {
+                expected: "publisher identifier".to_string(),
+                found: format!("{}", token.token_type),
+                diagnostic: Box::new(diagnostic),
+            });
+        };
+
+        // Expect '/'
+        self.consume(&TokenType::Slash, "Expected '/' after publisher name")?;
+
+        // Expect collection identifier
+        let collection = if let TokenType::Identifier(name) = &self.advance().token_type {
+            name.clone()
+        } else {
+            let token = self.previous();
+            let diagnostic = self
+                .diagnostic_collector
+                .parse_error(
+                    token.span.start,
+                    format!(
+                        "Expected collection name after '/', but found {}",
+                        token.token_type
+                    ),
+                )
+                .with_suggestion("External references should look like {@publisher/collection#table}".to_string());
+
+            return Err(ParseError::UnexpectedToken {
+                expected: "collection identifier".to_string(),
+                found: format!("{}", token.token_type),
+                diagnostic: Box::new(diagnostic),
+            });
+        };
+
+        // Expect '#'
+        self.consume(&TokenType::Hash, "Expected '#' after collection name")?;
+
+        // Expect table identifier
+        let table_id = if let TokenType::Identifier(name) = &self.advance().token_type {
+            name.clone()
+        } else {
+            let token = self.previous();
+            let diagnostic = self
+                .diagnostic_collector
+                .parse_error(
+                    token.span.start,
+                    format!(
+                        "Expected table identifier after '#', but found {}",
+                        token.token_type
+                    ),
+                )
+                .with_suggestion("External references should look like {@publisher/collection#table}".to_string());
+
+            return Err(ParseError::UnexpectedToken {
+                expected: "table identifier".to_string(),
+                found: format!("{}", token.token_type),
+                diagnostic: Box::new(diagnostic),
+            });
+        };
+
+        // Parse optional modifiers
+        let modifiers = self.parse_modifiers()?;
+
+        // Consume '}'
+        self.consume(&TokenType::RightBrace, "Expected '}' to close expression")?;
+
+        Ok(Expression::ExternalTableReference {
+            publisher,
+            collection,
+            table_id,
+            modifiers,
+        })
+    }
+
+    /// Parse modifiers (shared between table reference and external table reference)
+    fn parse_modifiers(&mut self) -> ParseResult<Vec<String>> {
+        let mut modifiers = Vec::new();
+
+        while self.check(&TokenType::Pipe) {
+            self.advance(); // consume '|'
+
+            // Expect a modifier keyword or identifier
+            match &self.advance().token_type {
+                TokenType::Modifier(modifier) => {
+                    modifiers.push(modifier.clone());
+                }
+                _ => {
+                    let token = self.previous();
+                    let diagnostic = self
+                        .diagnostic_collector
+                        .parse_error(
+                            token.span.start,
+                            format!(
+                                "Expected modifier after '|', but found {}",
+                                token.token_type
+                            ),
+                        )
+                        .with_suggestion("Valid modifiers are: indefinite, definite, capitalize, uppercase, lowercase".to_string());
+
+                    return Err(ParseError::UnexpectedToken {
+                        expected: "modifier keyword".to_string(),
+                        found: format!("{}", token.token_type),
+                        diagnostic: Box::new(diagnostic),
+                    });
+                }
+            }
+        }
+
+        Ok(modifiers)
     }
 
     // Utility methods

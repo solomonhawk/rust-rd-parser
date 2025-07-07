@@ -48,6 +48,13 @@ pub enum Expression {
         table_id: String,
         modifiers: Vec<String>,
     },
+    /// Reference to a table in an external collection
+    ExternalTableReference {
+        publisher: String,      // @username
+        collection: String,     // collection name
+        table_id: String,       // table within that collection
+        modifiers: Vec<String>, // same modifiers as internal refs
+    },
     /// Dice roll expression like "d6", "2d10", "100d20"
     DiceRoll { count: Option<u32>, sides: u32 },
 }
@@ -98,6 +105,24 @@ impl Rule {
                         format!("{{#{}}}", table_id)
                     } else {
                         format!("{{#{}|{}}}", table_id, modifiers.join("|"))
+                    }
+                }
+                RuleContent::Expression(Expression::ExternalTableReference {
+                    publisher,
+                    collection,
+                    table_id,
+                    modifiers,
+                }) => {
+                    if modifiers.is_empty() {
+                        format!("{{@{}/{}#{}}}", publisher, collection, table_id)
+                    } else {
+                        format!(
+                            "{{@{}/{}#{}|{}}}",
+                            publisher,
+                            collection,
+                            table_id,
+                            modifiers.join("|")
+                        )
                     }
                 }
                 RuleContent::Expression(Expression::DiceRoll { count, sides }) => match count {
@@ -173,6 +198,24 @@ impl fmt::Display for Rule {
                         format!("{{#{}}}", table_id)
                     } else {
                         format!("{{#{}|{}}}", table_id, modifiers.join("|"))
+                    }
+                }
+                RuleContent::Expression(Expression::ExternalTableReference {
+                    publisher,
+                    collection,
+                    table_id,
+                    modifiers,
+                }) => {
+                    if modifiers.is_empty() {
+                        format!("{{@{}/{}#{}}}", publisher, collection, table_id)
+                    } else {
+                        format!(
+                            "{{@{}/{}#{}|{}}}",
+                            publisher,
+                            collection,
+                            table_id,
+                            modifiers.join("|")
+                        )
                     }
                 }
                 RuleContent::Expression(Expression::DiceRoll { count, sides }) => match count {

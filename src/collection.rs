@@ -42,6 +42,26 @@ pub enum CollectionError {
         table_id: String,
         referencing_table: String,
     },
+
+    #[error(
+        "Missing dependency: External reference '@{publisher}/{collection}#{table_id}' in table '{referencing_table}' cannot be resolved. The collection '@{publisher}/{collection}' was not provided in the input sources."
+    )]
+    MissingDependency {
+        publisher: String,
+        collection: String,
+        table_id: String,
+        referencing_table: String,
+    },
+
+    #[error(
+        "External table not found: External reference '@{publisher}/{collection}#{table_id}' in table '{referencing_table}' refers to a table that does not exist in the provided collection."
+    )]
+    ExternalTableNotFound {
+        publisher: String,
+        collection: String,
+        table_id: String,
+        referencing_table: String,
+    },
 }
 
 /// Result type for collection operations
@@ -187,6 +207,21 @@ impl Collection {
 
                     result.push_str(&generated);
                 }
+                RuleContent::Expression(Expression::ExternalTableReference {
+                    publisher,
+                    collection,
+                    table_id,
+                    modifiers: _,
+                }) => {
+                    // For now, external references always error since we don't have dependency resolution
+                    // In the future, this will be handled by the dependency resolution system
+                    return Err(CollectionError::MissingDependency {
+                        publisher: publisher.clone(),
+                        collection: collection.clone(),
+                        table_id: table_id.clone(),
+                        referencing_table: table_id.clone(), // TODO: we need to pass the current table being generated
+                    });
+                }
                 RuleContent::Expression(Expression::DiceRoll { count, sides }) => {
                     // Roll dice and add the result
                     let dice_count = count.unwrap_or(1);
@@ -241,17 +276,33 @@ impl Collection {
         for (table_id, table) in tables {
             for rule in &table.rules {
                 for content in &rule.value.content {
-                    if let RuleContent::Expression(Expression::TableReference {
-                        table_id: ref_id,
-                        modifiers: _,
-                    }) = content
-                    {
-                        if !tables.contains_key(ref_id) {
-                            return Err(CollectionError::InvalidTableReference {
-                                table_id: ref_id.clone(),
+                    match content {
+                        RuleContent::Expression(Expression::TableReference {
+                            table_id: ref_id,
+                            modifiers: _,
+                        }) => {
+                            if !tables.contains_key(ref_id) {
+                                return Err(CollectionError::InvalidTableReference {
+                                    table_id: ref_id.clone(),
+                                    referencing_table: table_id.clone(),
+                                });
+                            }
+                        }
+                        RuleContent::Expression(Expression::ExternalTableReference {
+                            publisher,
+                            collection,
+                            table_id: ext_table_id,
+                            modifiers: _,
+                        }) => {
+                            // External references always error in basic collections since dependencies aren't resolved
+                            return Err(CollectionError::MissingDependency {
+                                publisher: publisher.clone(),
+                                collection: collection.clone(),
+                                table_id: ext_table_id.clone(),
                                 referencing_table: table_id.clone(),
                             });
                         }
+                        _ => {} // Other content types (text, dice rolls) don't need validation
                     }
                 }
             }
