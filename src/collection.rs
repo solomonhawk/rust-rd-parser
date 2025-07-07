@@ -9,6 +9,17 @@ type HashMapType<K, V> = std::collections::HashMap<K, V, ahash::RandomState>;
 #[cfg(not(feature = "wasm"))]
 type HashMapType<K, V> = std::collections::HashMap<K, V>;
 
+/// Optimized table for fast generation with pre-computed weights
+#[derive(Debug, Clone)]
+struct OptimizedTable {
+    pub metadata: crate::ast::TableMetadata,
+    pub rules: Vec<crate::ast::Node<crate::ast::Rule>>,
+    /// Pre-computed cumulative weights for O(log n) weighted selection via binary search
+    pub cumulative_weights: Vec<f64>,
+    /// Total weight of all rules (cached for performance)
+    pub total_weight: f64,
+}
+
 /// Errors that can occur during collection generation
 #[derive(Error, Debug)]
 pub enum CollectionError {
@@ -39,10 +50,52 @@ pub type CollectionResult<T> = Result<T, CollectionError>;
 /// Result type specifically for generation operations
 pub type CollectionGenResult = CollectionResult<String>;
 
+impl OptimizedTable {
+    /// Create an optimized table from a parsed table with pre-computed weights
+    fn from_table(table: Table) -> CollectionResult<Self> {
+        if table.rules.is_empty() {
+            return Err(CollectionError::EmptyTable(table.metadata.id.clone()));
+        }
+
+        let mut cumulative_weights = Vec::with_capacity(table.rules.len());
+        let mut cumulative = 0.0;
+
+        // Pre-compute cumulative weights for O(log n) binary search during generation
+        for rule in &table.rules {
+            cumulative += rule.value.weight;
+            cumulative_weights.push(cumulative);
+        }
+
+        let total_weight = cumulative;
+
+        Ok(Self {
+            metadata: table.metadata,
+            rules: table.rules,
+            cumulative_weights,
+            total_weight,
+        })
+    }
+
+    /// Fast weighted rule selection using binary search on pre-computed cumulative weights
+    /// This is O(log n) instead of O(n) linear search
+    fn select_rule_index(&self, random_value: f64) -> usize {
+        match self.cumulative_weights.binary_search_by(|&weight| {
+            if weight < random_value {
+                std::cmp::Ordering::Less
+            } else {
+                std::cmp::Ordering::Greater
+            }
+        }) {
+            Ok(index) => index,
+            Err(index) => index.min(self.rules.len() - 1),
+        }
+    }
+}
+
 /// A collection of tables that can generate random content
 #[derive(Debug)]
 pub struct Collection {
-    tables: HashMapType<String, Table>,
+    tables: HashMapType<String, OptimizedTable>,
     rng: SmallRng,
     table_order: Vec<String>, // Preserve the order tables appear in source
 }
@@ -58,17 +111,16 @@ impl Collection {
         let mut tables = HashMapType::default();
         let mut table_order = Vec::new();
 
-        // First pass: collect all tables and preserve order
+        // First pass: collect all tables and preserve order, optimizing during parse-time
         for table_node in program.tables {
             let table = table_node.value;
             let table_id = table.metadata.id.clone();
 
-            if table.rules.is_empty() {
-                return Err(CollectionError::EmptyTable(table_id));
-            }
+            // Convert to optimized table with pre-computed weights (parse-time optimization)
+            let optimized_table = OptimizedTable::from_table(table)?;
 
             table_order.push(table_id.clone());
-            tables.insert(table_id, table);
+            tables.insert(table_id, optimized_table);
         }
 
         // Second pass: validate all table references
@@ -93,29 +145,21 @@ impl Collection {
         Ok(results.join(", "))
     }
 
-    /// Generate a single result from a table
+    /// Generate a single result from a table (now optimized with pre-computed weights)
     fn generate_single(&mut self, table_id: &str) -> CollectionResult<String> {
-        // Get the rule first without holding references to self
+        // Get the rule using optimized selection
         let rule_content = {
             let table = self
                 .tables
                 .get(table_id)
                 .ok_or_else(|| CollectionError::TableNotFound(table_id.to_string()))?;
 
-            // Simple random selection based on cumulative weights
-            let total_weight: f64 = table.rules.iter().map(|r| r.value.weight).sum();
-            let random_value: f64 = self.rng.gen_range(0.0..total_weight);
+            // Use pre-computed total weight (O(1) instead of O(n))
+            let random_value: f64 = self.rng.gen_range(0.0..table.total_weight);
 
-            let mut cumulative_weight = 0.0;
-            let mut selected_rule = &table.rules[0];
-
-            for rule in &table.rules {
-                cumulative_weight += rule.value.weight;
-                if random_value <= cumulative_weight {
-                    selected_rule = rule;
-                    break;
-                }
-            }
+            // Use binary search on pre-computed cumulative weights (O(log n) instead of O(n))
+            let rule_index = table.select_rule_index(random_value);
+            let selected_rule = &table.rules[rule_index];
 
             // Clone the content so we don't hold a reference to self
             selected_rule.value.content.clone()
@@ -191,7 +235,9 @@ impl Collection {
     }
 
     /// Validate that all table references point to existing tables
-    fn validate_table_references(tables: &HashMapType<String, Table>) -> CollectionResult<()> {
+    fn validate_table_references(
+        tables: &HashMapType<String, OptimizedTable>,
+    ) -> CollectionResult<()> {
         for (table_id, table) in tables {
             for rule in &table.rules {
                 for content in &rule.value.content {
