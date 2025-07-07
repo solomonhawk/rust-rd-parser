@@ -65,7 +65,7 @@ pub fn main() {
                             "     Rule {}: weight={}, text=\"{}\"",
                             j + 1,
                             rule.value.weight,
-                            rule.value.to_string()
+                            rule.value
                         );
                     }
                 }

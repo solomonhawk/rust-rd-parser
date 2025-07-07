@@ -1,0 +1,70 @@
+// TBL Language Syntax Test File
+// This file demonstrates all the syntax features of the TBL language
+
+/*
+ * Multi-line comment block
+ * Used for longer explanations
+ */
+
+// Basic table with simple rules
+#basic-table
+1.0: Simple rule text
+2.5: Another rule with higher weight
+0.5: Lower weight rule
+
+// Table with export flag
+#weapons[export]
+1.0: Sword (damage: {2d6} + {1d4})
+2.0: Bow (damage: {1d8})
+1.5: Dagger (damage: {1d4})
+3.0: Staff (damage: {1d6})
+
+// Table with various dice expressions
+#dice-examples
+1.0: Roll a d6: {d6}
+1.0: Roll two d10s: {2d10}
+1.0: Roll one hundred d20s: {100d20}
+1.0: Roll a single d4: {1d4}
+
+// Table with references to other tables
+#armor
+1.0: {#material} armor (AC: {1d4} + 2)
+2.0: {#material} shield (+{1d2} AC)
+1.5: {#material} helmet
+
+// Materials table referenced above
+#material
+1.0: leather
+2.0: iron
+1.5: steel
+0.8: mithril
+3.0: wooden
+
+// Complex table with mixed expressions
+#treasure
+1.0: {#material} {#weapons} worth {3d6} gold pieces
+2.0: Potion of {#potion-type} (restores {2d4} + 2 points)
+1.5: {1d3} {#material} coins
+0.5: Ancient {#material} artifact (value: {10d10} gold)
+
+// Referenced potion types
+#potion-type
+1.0: healing
+1.0: mana
+0.5: poison
+2.0: strength
+
+// Table with hyphens and underscores in name
+#special_items-rare
+1.0: Dragon scale armor
+0.5: Phoenix feather
+2.0: Unicorn horn
+1.5: Troll regeneration potion
+
+// Comments can appear anywhere
+#mixed-content
+1.0: Normal rule // Line comment after rule
+/* Block comment
+   between rules */
+2.0: Another rule
+// Final comment

@@ -1,0 +1,35 @@
+{
+  "name": "tbl-language-support",
+  "displayName": "TBL Language Support",
+  "description": "Syntax highlighting for TBL (Table) files used in random generation",
+  "version": "0.1.0",
+  "publisher": "rust-rd-parser",
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "tbl",
+        "aliases": [
+          "TBL",
+          "tbl"
+        ],
+        "extensions": [
+          ".tbl"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "tbl",
+        "scopeName": "source.tbl",
+        "path": "./syntaxes/tbl.tmLanguage.json"
+      }
+    ]
+  }
+}
