@@ -4,13 +4,13 @@ set -e
 echo "Building WASM package..."
 
 # Build for web (ES modules)
-wasm-pack build --target web --features wasm --artifact-dir dist/pkg-web -Z unstable-options
+wasm-pack build --out-dir dist/pkg-web --target web --features wasm
 
 # Build for Node.js
-wasm-pack build --target nodejs --features wasm --artifact-dir dist/pkg-node -Z unstable-options
+wasm-pack build --out-dir dist/pkg-node --target nodejs --features wasm
 
 # Build for bundlers (webpack, etc.)
-wasm-pack build --target bundler --features wasm --artifact-dir dist/pkg -Z unstable-options
+wasm-pack build --out-dir dist/pkg --target bundler --features wasm
 
 echo "WASM build complete!"
 echo "Web package: dist/pkg-web/"

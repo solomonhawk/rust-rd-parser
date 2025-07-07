@@ -8,9 +8,9 @@
     "pkg/"
   ],
   "scripts": {
-    "build": "wasm-pack build --target web --features wasm --artifact-dir dist/pkg-web -Z unstable-options -v",
-    "build:nodejs": "wasm-pack build --target nodejs --features wasm --artifact-dir dist/pkg-node -Z unstable-options",
-    "build:bundler": "wasm-pack build --target bundler --features wasm --artifact-dir dist/pkg -Z unstable-options",
+    "build": "wasm-pack build --out-dir dist/pkg-web --target web --features wasm",
+    "build:nodejs": "wasm-pack build --out-dir dist/pkg-node --target nodejs --features wasm",
+    "build:bundler": "wasm-pack build --out-dir dist/pkg --target bundler --features wasm",
     "test": "wasm-pack test --chrome --features wasm-test",
     "test:node": "wasm-pack test --node --features wasm-test"
   },
