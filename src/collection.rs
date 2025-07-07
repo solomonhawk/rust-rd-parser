@@ -136,6 +136,15 @@ impl Collection {
                     let generated = self.generate_single(ref_id)?;
                     result.push_str(&generated);
                 }
+                RuleContent::Expression(Expression::DiceRoll { count, sides }) => {
+                    // Roll dice and add the result
+                    let dice_count = count.unwrap_or(1);
+                    let mut total = 0;
+                    for _ in 0..dice_count {
+                        total += self.rng.gen_range(1..=*sides);
+                    }
+                    result.push_str(&total.to_string());
+                }
             }
         }
 

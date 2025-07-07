@@ -413,4 +413,130 @@ mod tests {
 
         assert!(non_eof_tokens.len() >= 5); // At least the core tokens
     }
+
+    #[test]
+    fn test_dice_roll_expressions() {
+        let source = r#"#test
+1.0: roll {d6}
+2.0: bigger roll {2d10}
+3.0: huge roll {100d20}"#;
+
+        let result = parse(source);
+        if let Err(ref e) = result {
+            println!("Parse error: {}", e);
+        }
+        assert!(result.is_ok(), "Should parse dice roll expressions");
+
+        let program = result.unwrap();
+        assert_eq!(program.tables.len(), 1);
+        assert_eq!(program.tables[0].value.rules.len(), 3);
+
+        // Check the first rule contains a dice roll
+        let rule1 = &program.tables[0].value.rules[0].value;
+        assert_eq!(rule1.content.len(), 2); // "roll " and dice expression
+        match &rule1.content[1] {
+            RuleContent::Expression(Expression::DiceRoll { count, sides }) => {
+                assert_eq!(*count, None);
+                assert_eq!(*sides, 6);
+            }
+            _ => panic!("Expected dice roll expression"),
+        }
+
+        // Check content_text() works correctly for dice rolls
+        assert_eq!(rule1.content_text(), "roll {d6}");
+
+        let rule2 = &program.tables[0].value.rules[1].value;
+        assert_eq!(rule2.content_text(), "bigger roll {2d10}");
+    }
+
+    #[test]
+    fn test_dice_roll_in_collection() {
+        let source = r#"#dice-test
+1.0: You rolled {d6}!
+2.0: Double dice: {2d6}
+3.0: Big damage: {5d8} points"#;
+
+        let result = Collection::new(source);
+        assert!(result.is_ok(), "Collection should work with dice rolls");
+
+        let mut collection = result.unwrap();
+        assert!(collection.has_table("dice-test"));
+
+        // Test generation - should produce numbers
+        let generation_result = collection.generate("dice-test", 5);
+        assert!(generation_result.is_ok(), "Should generate with dice rolls");
+
+        let generated = generation_result.unwrap();
+        println!("Generated with dice: {}", generated);
+        // Should contain numeric results from dice rolls
+        assert!(generated.contains(char::is_numeric), "Should contain dice roll results");
+    }
+
+    #[test]
+    fn test_tokenize_dice_rolls() {
+        let source = "#test\n1.0: {d6} {2d10} {100d20}";
+        let result = tokenize(source);
+        assert!(result.is_ok());
+
+        let tokens = result.unwrap();
+        // Find the dice roll tokens
+        let dice_tokens: Vec<_> = tokens.iter()
+            .filter(|t| matches!(t.token_type, TokenType::DiceRoll { .. }))
+            .collect();
+        
+        assert_eq!(dice_tokens.len(), 3, "Should have 3 dice roll tokens");
+        
+        // Check first dice roll (d6)
+        if let TokenType::DiceRoll { count, sides } = &dice_tokens[0].token_type {
+            assert_eq!(*count, None);
+            assert_eq!(*sides, 6);
+        } else {
+            panic!("Expected dice roll token");
+        }
+        
+        // Check second dice roll (2d10)
+        if let TokenType::DiceRoll { count, sides } = &dice_tokens[1].token_type {
+            assert_eq!(*count, Some(2));
+            assert_eq!(*sides, 10);
+        } else {
+            panic!("Expected dice roll token");
+        }
+        
+        // Check third dice roll (100d20)
+        if let TokenType::DiceRoll { count, sides } = &dice_tokens[2].token_type {
+            assert_eq!(*count, Some(100));
+            assert_eq!(*sides, 20);
+        } else {
+            panic!("Expected dice roll token");
+        }
+    }
+
+    #[test]
+    fn test_mixed_expressions() {
+        let source = r#"#mixed
+1.0: {#color} sword with {d6} damage
+2.0: {2d4} {#potion} bottles"#;
+
+        let result = parse(source);
+        assert!(result.is_ok(), "Should parse mixed table references and dice rolls");
+
+        let program = result.unwrap();
+        let rule1 = &program.tables[0].value.rules[0].value;
+
+        // Should have: text, table_ref, text, dice_roll, text
+        assert_eq!(rule1.content.len(), 5);
+        match &rule1.content[1] {
+            RuleContent::Expression(Expression::TableReference { table_id }) => {
+                assert_eq!(table_id, "color");
+            }
+            _ => panic!("Expected table reference"),
+        }
+        match &rule1.content[3] {
+            RuleContent::Expression(Expression::DiceRoll { count, sides }) => {
+                assert_eq!(*count, None);
+                assert_eq!(*sides, 6);
+            }
+            _ => panic!("Expected dice roll"),
+        }
+    }
 }

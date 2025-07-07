@@ -28,6 +28,9 @@ pub enum TokenType {
     /// Table identifier (after #)
     Identifier(String),
 
+    /// Dice roll expression (like "d6", "2d10")
+    DiceRoll { count: Option<u32>, sides: u32 },
+
     /// Left bracket '['
     LeftBracket,
 
@@ -190,10 +193,23 @@ impl Lexer {
             // Numbers (positive floating point only) - only when not in rule text
             c if c.is_ascii_digit() && !self.in_rule_text => self.number(),
 
-            // Identifiers (table names and keywords) - allowed outside rule text or inside expressions
-            c if c.is_alphabetic() && (!self.in_rule_text || self.in_expression) => {
-                self.identifier()
+            // Dice rolls or identifiers when in expressions
+            c if (c.is_alphabetic() || c.is_ascii_digit()) && self.in_expression => {
+                // Check if this might be a dice roll
+                if c == 'd' && !self.is_at_end() && self.peek().is_ascii_digit() {
+                    // This is a dice roll starting with 'd'
+                    self.dice_roll()
+                } else if c.is_ascii_digit() && self.peek_for_dice() {
+                    // This is a dice roll starting with a number
+                    self.dice_roll()
+                } else {
+                    // Regular identifier
+                    self.identifier()
+                }
             }
+
+            // Identifiers (table names and keywords) - allowed outside rule text
+            c if c.is_alphabetic() && !self.in_rule_text => self.identifier(),
 
             // Text content when in rule text mode but not in expression
             _ if self.in_rule_text && !self.in_expression && c != '{' && c != '}' && c != '\n' => {
@@ -419,6 +435,150 @@ impl Lexer {
         // Return None to skip this comment
         Ok(None)
     }
+
+    fn peek_for_dice(&self) -> bool {
+        // Look ahead to see if this looks like a dice roll pattern
+        let mut pos = self.current;
+
+        // Skip digits (the count part)
+        while pos < self.input.len() && self.input[pos].is_ascii_digit() {
+            pos += 1;
+        }
+
+        // Check if we find a 'd' character
+        pos < self.input.len() && self.input[pos] == 'd'
+    }
+
+    fn dice_roll(&mut self) -> LexResult<Option<Token>> {
+        let mut count = None;
+
+        // Check if we start with digits (the count) or 'd'
+        let current_char = self.input[self.current - 1];
+
+        if current_char.is_ascii_digit() {
+            // Back up to parse the number
+            self.current -= 1;
+            let start_pos = self.current;
+
+            // Parse the count
+            while !self.is_at_end() && self.peek().is_ascii_digit() {
+                self.advance();
+            }
+
+            let count_str: String = self.input[start_pos..self.current].iter().collect();
+            count = Some(count_str.parse::<u32>().map_err(|_| {
+                let diagnostic = self
+                    .diagnostic_collector
+                    .lex_error(start_pos, format!("Invalid dice count: {}", count_str))
+                    .with_suggestion(
+                        "Dice count should be a positive integer like 2, 10, or 100".to_string(),
+                    );
+
+                LexError::InvalidNumber {
+                    reason: format!("Invalid dice count: {}", count_str),
+                    diagnostic: Box::new(diagnostic),
+                }
+            })?);
+        } else if current_char == 'd' {
+            // We start with 'd', no count specified (defaults to 1)
+            // The 'd' is already consumed, so we continue to parse sides
+        } else {
+            // This shouldn't happen given our calling logic
+            let diagnostic = self
+                .diagnostic_collector
+                .lex_error(
+                    self.current - 1,
+                    "Expected digit or 'd' in dice roll".to_string(),
+                )
+                .with_suggestion("Dice rolls should start with a number or 'd'".to_string());
+
+            return Err(LexError::InvalidCharacter {
+                character: current_char,
+                diagnostic: Box::new(diagnostic),
+            });
+        }
+
+        // Expect 'd' character (unless we already started with it)
+        if current_char != 'd' {
+            if !self.is_at_end() && self.peek() == 'd' {
+                self.advance(); // consume 'd'
+            } else {
+                let diagnostic = self
+                    .diagnostic_collector
+                    .lex_error(
+                        self.current,
+                        "Expected 'd' in dice roll expression".to_string(),
+                    )
+                    .with_suggestion(
+                        "Dice rolls should be formatted like 'd6', '2d10', or '100d20'".to_string(),
+                    );
+
+                return Err(LexError::InvalidCharacter {
+                    character: self.peek(),
+                    diagnostic: Box::new(diagnostic),
+                });
+            }
+        }
+
+        // Parse the sides (number of sides on the dice)
+        let sides_start = self.current;
+        while !self.is_at_end() && self.peek().is_ascii_digit() {
+            self.advance();
+        }
+
+        if self.current == sides_start {
+            let diagnostic = self
+                .diagnostic_collector
+                .lex_error(
+                    self.current,
+                    "Expected number of sides after 'd'".to_string(),
+                )
+                .with_suggestion(
+                    "Dice rolls should specify the number of sides like 'd6', 'd10', or 'd20'"
+                        .to_string(),
+                );
+
+            return Err(LexError::InvalidCharacter {
+                character: self.peek(),
+                diagnostic: Box::new(diagnostic),
+            });
+        }
+
+        let sides_str: String = self.input[sides_start..self.current].iter().collect();
+        let sides = sides_str.parse::<u32>().map_err(|_| {
+            let diagnostic = self
+                .diagnostic_collector
+                .lex_error(sides_start, format!("Invalid dice sides: {}", sides_str))
+                .with_suggestion(
+                    "Dice sides should be a positive integer like 6, 10, or 20".to_string(),
+                );
+
+            LexError::InvalidNumber {
+                reason: format!("Invalid dice sides: {}", sides_str),
+                diagnostic: Box::new(diagnostic),
+            }
+        })?;
+
+        if sides == 0 {
+            let diagnostic = self
+                .diagnostic_collector
+                .lex_error(sides_start, "Dice must have at least 1 side".to_string())
+                .with_suggestion(
+                    "Use positive numbers for dice sides like 6, 10, or 20".to_string(),
+                );
+
+            return Err(LexError::InvalidNumber {
+                reason: "Dice must have at least 1 side".to_string(),
+                diagnostic: Box::new(diagnostic),
+            });
+        }
+
+        Ok(Some(Token::new(
+            TokenType::DiceRoll { count, sides },
+            self.lexeme(),
+            Span::new(self.start, self.current),
+        )))
+    }
 }
 
 impl fmt::Display for TokenType {
@@ -430,6 +590,10 @@ impl fmt::Display for TokenType {
             TokenType::TextSegment(text) => write!(f, "{}", text),
             TokenType::Hash => write!(f, "#"),
             TokenType::Identifier(name) => write!(f, "{}", name),
+            TokenType::DiceRoll { count, sides } => match count {
+                Some(c) => write!(f, "{}d{}", c, sides),
+                None => write!(f, "d{}", sides),
+            },
             TokenType::LeftBracket => write!(f, "["),
             TokenType::RightBracket => write!(f, "]"),
             TokenType::LeftBrace => write!(f, "{{"),

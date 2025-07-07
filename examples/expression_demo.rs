@@ -40,7 +40,15 @@ pub fn main() {
                                 table_collection::RuleContent::Expression(
                                     table_collection::Expression::TableReference { table_id },
                                 ) => {
-                                    println!("        [{}] Expression: {{#{}}}", i, table_id);
+                                    println!("        [{}] Table Reference: {{#{}}}", i, table_id);
+                                }
+                                table_collection::RuleContent::Expression(
+                                    table_collection::Expression::DiceRoll { count, sides },
+                                ) => {
+                                    match count {
+                                        Some(c) => println!("        [{}] Dice Roll: {{{}d{}}}", i, c, sides),
+                                        None => println!("        [{}] Dice Roll: {{d{}}}", i, sides),
+                                    }
                                 }
                             }
                         }

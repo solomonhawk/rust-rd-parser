@@ -45,7 +45,8 @@ impl<T> Node<T> {
 pub enum Expression {
     /// Reference to another table by ID
     TableReference { table_id: String },
-    // Future: could add other expression types like variables, functions, etc.
+    /// Dice roll expression like "d6", "2d10", "100d20"
+    DiceRoll { count: Option<u32>, sides: u32 },
 }
 
 /// A piece of rule text content - either literal text or an expression
@@ -89,6 +90,10 @@ impl Rule {
                 RuleContent::Expression(Expression::TableReference { table_id }) => {
                     format!("{{#{}}}", table_id)
                 }
+                RuleContent::Expression(Expression::DiceRoll { count, sides }) => match count {
+                    Some(c) => format!("{{{}d{}}}", c, sides),
+                    None => format!("{{d{}}}", sides),
+                },
             })
             .collect::<Vec<_>>()
             .join("")
@@ -153,6 +158,10 @@ impl fmt::Display for Rule {
                 RuleContent::Expression(Expression::TableReference { table_id }) => {
                     format!("{{#{}}}", table_id)
                 }
+                RuleContent::Expression(Expression::DiceRoll { count, sides }) => match count {
+                    Some(c) => format!("{{{}d{}}}", c, sides),
+                    None => format!("{{d{}}}", sides),
+                },
             })
             .collect::<Vec<_>>()
             .join("");

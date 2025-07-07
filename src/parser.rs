@@ -271,36 +271,65 @@ impl Parser {
         // Consume '{'
         self.consume(&TokenType::LeftBrace, "Expected '{' to start expression")?;
 
-        // Expect '#' for table reference
-        self.consume(&TokenType::Hash, "Expected '#' for table reference")?;
+        // Check what kind of expression this is
+        if self.check(&TokenType::Hash) {
+            // Table reference: {#table_name}
+            self.advance(); // consume '#'
 
-        // Expect table identifier
-        let table_id = if let TokenType::Identifier(name) = &self.advance().token_type {
-            name.clone()
+            // Expect table identifier
+            let table_id = if let TokenType::Identifier(name) = &self.advance().token_type {
+                name.clone()
+            } else {
+                let token = self.previous();
+                let diagnostic = self
+                    .diagnostic_collector
+                    .parse_error(
+                        token.span.start,
+                        format!(
+                            "Expected table identifier after '#', but found {}",
+                            token.token_type
+                        ),
+                    )
+                    .with_suggestion("Table references should look like {#table_name}".to_string());
+
+                return Err(ParseError::UnexpectedToken {
+                    expected: "table identifier".to_string(),
+                    found: format!("{}", token.token_type),
+                    diagnostic: Box::new(diagnostic),
+                });
+            };
+
+            // Consume '}'
+            self.consume(&TokenType::RightBrace, "Expected '}' to close expression")?;
+
+            Ok(Expression::TableReference { table_id })
+        } else if let TokenType::DiceRoll { count, sides } = &self.peek().token_type {
+            // Dice roll expression: {d6} or {2d10}
+            let count = *count;
+            let sides = *sides;
+            self.advance(); // consume the dice roll token
+
+            // Consume '}'
+            self.consume(&TokenType::RightBrace, "Expected '}' to close expression")?;
+
+            Ok(Expression::DiceRoll { count, sides })
         } else {
-            let token = self.previous();
+            // Unknown expression type
+            let token = self.peek();
             let diagnostic = self
                 .diagnostic_collector
                 .parse_error(
                     token.span.start,
-                    format!(
-                        "Expected table identifier after '#', but found {}",
-                        token.token_type
-                    ),
+                    format!("Unexpected token in expression: {}", token.token_type),
                 )
-                .with_suggestion("Table references should look like {#table_name}".to_string());
+                .with_suggestion("Expressions should be table references like {#table} or dice rolls like {d6} or {2d10}".to_string());
 
-            return Err(ParseError::UnexpectedToken {
-                expected: "table identifier".to_string(),
+            Err(ParseError::UnexpectedToken {
+                expected: "table reference or dice roll".to_string(),
                 found: format!("{}", token.token_type),
                 diagnostic: Box::new(diagnostic),
-            });
-        };
-
-        // Consume '}'
-        self.consume(&TokenType::RightBrace, "Expected '}' to close expression")?;
-
-        Ok(Expression::TableReference { table_id })
+            })
+        }
     }
 
     // Utility methods
