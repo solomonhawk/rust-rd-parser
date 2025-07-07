@@ -68,6 +68,13 @@ export function useTblWorker() {
     []
   );
 
+  const getExportedTableIds = useCallback(
+    async (content: string): Promise<TableIdsResult> => {
+      return workerInstance.getExportedTableIds(content);
+    },
+    []
+  );
+
   const getVersion = useCallback(async (): Promise<string> => {
     return workerInstance.getVersion();
   }, []);
@@ -81,6 +88,7 @@ export function useTblWorker() {
     validateSyntax,
     generateContent,
     getTableIds,
+    getExportedTableIds,
     getVersion,
     getExampleSource,
   };

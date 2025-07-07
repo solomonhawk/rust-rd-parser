@@ -182,6 +182,31 @@ export async function getTableIds(content: string): Promise<{
   }
 }
 
+export async function getExportedTableIds(content: string): Promise<{
+  success: boolean;
+  tableIds?: string[];
+  error?: string;
+}> {
+  await init();
+
+  try {
+    const collection = new WasmCollection(content);
+    const tableIds = collection.get_exported_table_ids();
+    collection.free(); // Clean up WASM memory
+
+    return {
+      success: true,
+      tableIds,
+    };
+  } catch (error) {
+    console.error("WASM exported table ID extraction error:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
 export async function getVersion(): Promise<string> {
   await init();
   return WasmUtils.version();

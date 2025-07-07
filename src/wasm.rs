@@ -193,6 +193,12 @@ impl WasmCollection {
     pub fn get_table_ids(&self) -> Vec<String> {
         self.collection.get_table_ids()
     }
+
+    /// Get a list of exported table IDs in the collection
+    #[wasm_bindgen]
+    pub fn get_exported_table_ids(&self) -> Vec<String> {
+        self.collection.get_exported_table_ids()
+    }
 }
 
 /// Utility functions for WASM

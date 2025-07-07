@@ -14,12 +14,13 @@ function App() {
   const [tableIds, setTableIds] = useState<string[]>([]);
   const [generatedContent, setGeneratedContent] = useState<string>("");
   const [isGenerating, setIsGenerating] = useState(false);
+  const [showOnlyExported, setShowOnlyExported] = useState(false);
 
   // Initialize TBL worker
-  const { validateSyntax, getTableIds, generateContent } = useTblWorker();
+  const { validateSyntax, getTableIds, getExportedTableIds, generateContent } = useTblWorker();
 
   // Simple worker ready check - if functions are available, worker is ready
-  const isWorkerReady = !!validateSyntax && !!getTableIds && !!generateContent;
+  const isWorkerReady = !!validateSyntax && !!getTableIds && !!getExportedTableIds && !!generateContent;
 
   const [code, setCode] = useState(`// Welcome to the TBL Language Editor!
 // This editor supports the TBL (Table) format with dice roll expressions and comments
@@ -71,9 +72,17 @@ function App() {
         // If validation is successful, fetch table IDs
         if (result.isValid) {
           try {
-            const tableResult = await getTableIds(content);
-            if (tableResult.success && tableResult.tableIds) {
-              setTableIds(tableResult.tableIds);
+            const [allTablesResult, exportedTablesResult] = await Promise.all([
+              getTableIds(content),
+              getExportedTableIds(content)
+            ]);
+            
+            if (allTablesResult.success && allTablesResult.tableIds) {
+              // Store all table IDs and filter based on user preference
+              const tablesToShow = showOnlyExported && exportedTablesResult.success && exportedTablesResult.tableIds
+                ? exportedTablesResult.tableIds
+                : allTablesResult.tableIds;
+              setTableIds(tablesToShow);
             }
           } catch (error) {
             console.error("Failed to get table IDs:", error);
@@ -124,7 +133,7 @@ function App() {
         setIsValidating(false);
       }
     },
-    [isWorkerReady, monacoInstance, validateSyntax, getTableIds]
+    [isWorkerReady, monacoInstance, validateSyntax, getTableIds, getExportedTableIds, showOnlyExported]
   );
 
   // Debounced validation
@@ -135,6 +144,13 @@ function App() {
 
     return () => clearTimeout(timeoutId);
   }, [code, validateAndUpdateMarkers]);
+
+  // Re-validate when filter changes to update table list
+  useEffect(() => {
+    if (isWorkerReady && code) {
+      validateAndUpdateMarkers(code);
+    }
+  }, [showOnlyExported, isWorkerReady, code, validateAndUpdateMarkers]);
 
   // Handle table generation
   const handleGenerateFromTable = useCallback(
@@ -276,6 +292,40 @@ function App() {
           <h3 style={{ margin: "0 0 1rem 0", fontSize: "1.1rem" }}>
             Table Generation
           </h3>
+
+          {/* Filter Toggle */}
+          <div style={{ 
+            marginBottom: "1rem", 
+            padding: "0.5rem",
+            backgroundColor: "#333",
+            borderRadius: "4px",
+            border: "1px solid #555"
+          }}>
+            <label style={{ 
+              display: "flex", 
+              alignItems: "center", 
+              cursor: "pointer",
+              fontSize: "0.9rem"
+            }}>
+              <input
+                type="checkbox"
+                checked={showOnlyExported}
+                onChange={(e) => setShowOnlyExported(e.target.checked)}
+                style={{ marginRight: "0.5rem" }}
+              />
+              Show only exported tables
+            </label>
+            <div style={{ 
+              fontSize: "0.8rem", 
+              color: "#aaa", 
+              marginTop: "0.25rem",
+              marginLeft: "1.5rem"
+            }}>
+              {showOnlyExported 
+                ? "Showing tables marked with [export]" 
+                : "Showing all tables"}
+            </div>
+          </div>
 
           {!isWorkerReady ? (
             <div style={{ color: "#666", fontStyle: "italic" }}>

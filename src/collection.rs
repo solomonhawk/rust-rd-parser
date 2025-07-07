@@ -182,6 +182,15 @@ impl Collection {
     pub fn get_table_ids(&self) -> Vec<String> {
         self.tables.keys().cloned().collect()
     }
+
+    /// Get a list of exported table IDs in the collection
+    pub fn get_exported_table_ids(&self) -> Vec<String> {
+        self.tables
+            .iter()
+            .filter(|(_, table)| table.metadata.export)
+            .map(|(id, _)| id.clone())
+            .collect()
+    }
 }
 
 #[cfg(test)]
