@@ -393,10 +393,15 @@ function provideExpressionCompletions(
   const afterPipe = lineUpToCursor.includes("|");
   const justOpenedBrace = lineUpToCursor.endsWith("{");
 
+  console.log({
+    afterHash,
+    afterPipe,
+    justOpenedBrace,
+  });
   // Priority 1: Table references if we're after a # character
   if (afterHash) {
     const partialTableName = afterHash[1] || "";
-
+    console.log(tableNames, partialTableName);
     tableNames
       .filter((name) =>
         name.toLowerCase().startsWith(partialTableName.toLowerCase())
@@ -412,7 +417,7 @@ function provideExpressionCompletions(
           range: {
             startLineNumber: position.lineNumber,
             endLineNumber: position.lineNumber,
-            startColumn: position.column - partialTableName.length,
+            startColumn: position.column - partialTableName.length - 1, // Include the # in the range
             endColumn: position.column,
           },
         });
@@ -550,12 +555,14 @@ function provideExpressionCompletions(
     }
   }
 
+  console.log(suggestions);
+
   return { suggestions };
 }
 
 // Helper function to extract table names from the document
 function extractTableNames(text: string): string[] {
-  const tablePattern = /#([a-zA-Z_][a-zA-Z0-9_-]*)/g;
+  const tablePattern = /^#([a-zA-Z_][a-zA-Z0-9_-]*)/gm;
   const matches = text.matchAll(tablePattern);
   const tableNames = new Set<string>();
 
