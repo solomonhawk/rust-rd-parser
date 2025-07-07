@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -e
+
+echo "Building WASM package..."
+
+# Build for web (ES modules)
+wasm-pack build --target web --features wasm --artifact-dir dist/pkg-web -Z unstable-options
+
+# Build for Node.js
+wasm-pack build --target nodejs --features wasm --artifact-dir dist/pkg-node -Z unstable-options
+
+# Build for bundlers (webpack, etc.)
+wasm-pack build --target bundler --features wasm --artifact-dir dist/pkg -Z unstable-options
+
+echo "WASM build complete!"
+echo "Web package: dist/pkg-web/"
+echo "Node.js package: dist/pkg-node/"
+echo "Bundler package: dist/pkg/"

@@ -7,6 +7,9 @@ pub mod errors;
 pub mod lexer;
 pub mod parser;
 
+#[cfg(feature = "wasm")]
+pub mod wasm;
+
 pub use ast::{Expression, Node, Program, Rule, RuleContent, Span, Table, TableMetadata};
 pub use collection::{Collection, CollectionError, CollectionGenResult, CollectionResult};
 pub use diagnostic::{Diagnostic, DiagnosticKind, Severity, SourceLocation};
@@ -15,6 +18,9 @@ pub use diagnostic_formatter::DiagnosticFormatter;
 pub use errors::{LexError, LexResult, ParseError, ParseResult};
 pub use lexer::{Lexer, Token, TokenType};
 pub use parser::Parser;
+
+#[cfg(feature = "wasm")]
+pub use wasm::{WasmCollection, WasmParser, WasmUtils};
 
 /// Parse source code into an AST
 ///

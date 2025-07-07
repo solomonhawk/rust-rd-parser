@@ -125,6 +125,16 @@ impl Collection {
 
         Ok(result.trim().to_string())
     }
+
+    /// Check if a table exists in the collection
+    pub fn has_table(&self, table_id: &str) -> bool {
+        self.tables.contains_key(table_id)
+    }
+
+    /// Get a list of all table IDs in the collection
+    pub fn get_table_ids(&self) -> Vec<String> {
+        self.tables.keys().cloned().collect()
+    }
 }
 
 #[cfg(test)]

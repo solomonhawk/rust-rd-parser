@@ -7,14 +7,33 @@ description = "A small Rust library that parses a simple syntax into an AST"
 license = "MIT"
 readme = "README.md"
 
+[lib]
+crate-type = ["cdylib", "rlib"]
+
 [dependencies]
 thiserror = "1.0"
 log = "0.4"
 rand = "0.8"
 serde = { version = "1.0", features = ["derive"], optional = true }
+serde_json = { version = "1.0", optional = true }
+wasm-bindgen = { version = "0.2", optional = true }
+js-sys = { version = "0.3", optional = true }
+wee_alloc = { version = "0.4", optional = true }
+console_error_panic_hook = { version = "0.1", optional = true }
+getrandom = { version = "0.2", features = ["js"], optional = true }
 
 [dev-dependencies]
 pretty_assertions = "1.4"
+wasm-bindgen-test = "0.3"
 
 [features]
-serde = ["dep:serde"]
+default = ["serde"]
+serde = ["dep:serde", "dep:serde_json"]
+wasm = [
+  "dep:wasm-bindgen",
+  "dep:js-sys",
+  "dep:wee_alloc",
+  "dep:console_error_panic_hook",
+  "dep:getrandom",
+  "serde",
+]
