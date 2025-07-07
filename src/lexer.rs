@@ -1,5 +1,5 @@
 use crate::ast::Span;
-use crate::errors::{LexError, LexResult};
+use crate::errors::{ErrorContext, LexError, LexResult};
 use std::fmt;
 
 #[cfg(feature = "serde")]
@@ -47,6 +47,7 @@ impl Token {
 /// Lexer for tokenizing input source code
 pub struct Lexer {
     input: Vec<char>,
+    source: String,
     current: usize,
     start: usize,
     in_rule_text: bool,
@@ -57,6 +58,7 @@ impl Lexer {
     pub fn new(input: &str) -> Self {
         Self {
             input: input.chars().collect(),
+            source: input.to_string(),
             current: 0,
             start: 0,
             in_rule_text: false,
@@ -116,10 +118,32 @@ impl Lexer {
                 self.rule_text()
             }
 
-            _ => Err(LexError::InvalidCharacter {
-                character: c,
-                position: self.current - 1,
-            }),
+            _ => {
+                let context = ErrorContext::new(&self.source, self.current - 1);
+                let suggestion = match c {
+                    ':' if self.in_rule_text => Some(
+                        "Colons inside rule text are allowed, this might be a parser bug"
+                            .to_string(),
+                    ),
+                    c if c.is_ascii_alphabetic() && !self.in_rule_text => Some(
+                        "Rule text must come after a colon. Did you forget the weight and colon?"
+                            .to_string(),
+                    ),
+                    c if c.is_ascii_digit() && self.in_rule_text => {
+                        Some("Numbers inside rule text are allowed".to_string())
+                    }
+                    _ => Some(
+                        "Only numbers (weights), colons, and rule text are allowed in this format"
+                            .to_string(),
+                    ),
+                };
+
+                Err(LexError::InvalidCharacter {
+                    character: c,
+                    context,
+                    suggestion,
+                })
+            }
         }
     }
 
@@ -138,17 +162,25 @@ impl Lexer {
             }
         }
 
-        let value = self
-            .lexeme()
-            .parse::<f64>()
-            .map_err(|_| LexError::InvalidNumber {
-                position: self.start,
-            })?;
+        let lexeme = self.lexeme();
+        let value = lexeme.parse::<f64>().map_err(|_| {
+            let context = ErrorContext::new(&self.source, self.start);
+            LexError::InvalidNumber {
+                context,
+                reason: format!("'{}' is not a valid number", lexeme),
+                suggestion: Some(
+                    "Numbers should be positive decimal values like 1.5, 2.0, or 42".to_string(),
+                ),
+            }
+        })?;
 
         // Ensure it's positive
         if value <= 0.0 {
+            let context = ErrorContext::new(&self.source, self.start);
             return Err(LexError::InvalidNumber {
-                position: self.start,
+                context,
+                reason: format!("Weight must be positive, but got {}", value),
+                suggestion: Some("Try using a positive number like 1.0, 2.5, or 10".to_string()),
             });
         }
 

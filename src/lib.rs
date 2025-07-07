@@ -4,14 +4,14 @@ pub mod lexer;
 pub mod parser;
 
 pub use ast::{Node, Program, Rule, Span};
-pub use errors::{LexError, ParseError, ParseResult};
+pub use errors::{LexError, ParseError, ParseResult, LexResult, ErrorContext};
 pub use lexer::{Lexer, Token, TokenType};
 pub use parser::Parser;
 
 /// Parse source code into an AST
 ///
 /// This is the main entry point for parsing. It takes source code as a string
-/// and returns either a parsed AST or an error.
+/// and returns either a parsed AST or an error with enhanced error reporting.
 ///
 /// # Examples
 ///
@@ -21,13 +21,13 @@ pub use parser::Parser;
 /// let source = "1.5: simple rule";
 /// match parse(source) {
 ///     Ok(ast) => println!("Parsed successfully: {:?}", ast),
-///     Err(e) => eprintln!("Parse error: {}", e),
+///     Err(e) => eprintln!("Parse error:\n{}", e),
 /// }
 /// ```
 pub fn parse(source: &str) -> ParseResult<Program> {
     let mut lexer = Lexer::new(source);
     let tokens = lexer.tokenize()?;
-    let mut parser = Parser::new(tokens);
+    let mut parser = Parser::from_source(tokens, source.to_string());
     parser.parse()
 }
 
