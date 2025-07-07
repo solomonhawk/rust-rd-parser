@@ -253,8 +253,10 @@ impl Lexer {
     }
 
     fn identifier(&mut self) -> LexResult<Option<Token>> {
-        // Collect alphanumeric characters and underscores
-        while !self.is_at_end() && (self.peek().is_alphanumeric() || self.peek() == '_') {
+        // Collect alphanumeric characters, underscores, and hyphens
+        while !self.is_at_end()
+            && (self.peek().is_alphanumeric() || self.peek() == '_' || self.peek() == '-')
+        {
             self.advance();
         }
 

@@ -243,4 +243,87 @@ mod tests {
         let rule3 = &program.tables[2].value.rules[2].value;
         assert_eq!(rule3.content_text(), "small {#shape}");
     }
+
+    #[test]
+    fn test_table_ids_with_hyphens_and_underscores() {
+        let source = r#"#potion-descriptor
+1.0: fresh
+2.0: stale
+
+#color_variant
+1.0: light blue
+2.0: dark red
+
+#item-with_mixed
+1.0: {#potion-descriptor} {#color_variant} potion"#;
+
+        let result = parse(source);
+        assert!(
+            result.is_ok(),
+            "Should parse table IDs with hyphens and underscores"
+        );
+
+        let program = result.unwrap();
+        assert_eq!(program.tables.len(), 3);
+
+        // Check that all table IDs are parsed correctly
+        let table_ids: Vec<&str> = program
+            .tables
+            .iter()
+            .map(|table| table.value.metadata.id.as_str())
+            .collect();
+
+        assert!(table_ids.contains(&"potion-descriptor"));
+        assert!(table_ids.contains(&"color_variant"));
+        assert!(table_ids.contains(&"item-with_mixed"));
+    }
+
+    #[test]
+    fn test_collection_with_hyphenated_table_ids() {
+        let source = r#"#potion-descriptor
+1.0: fresh
+2.0: stale
+
+#color-variant
+1.0: light blue
+2.0: dark red
+
+#mixed-item
+1.0: {#potion-descriptor} {#color-variant} potion"#;
+
+        let result = Collection::new(source);
+        assert!(
+            result.is_ok(),
+            "Collection should work with hyphenated table IDs"
+        );
+
+        let mut collection = result.unwrap();
+
+        // Test that we can generate from tables with hyphens
+        assert!(collection.has_table("potion-descriptor"));
+        assert!(collection.has_table("color-variant"));
+        assert!(collection.has_table("mixed-item"));
+
+        let generation_result = collection.generate("mixed-item", 1);
+        assert!(
+            generation_result.is_ok(),
+            "Should be able to generate from hyphenated table"
+        );
+    }
+
+    #[test]
+    fn test_tokenize_hyphenated_identifiers() {
+        let source = "#potion-descriptor";
+        let result = tokenize(source);
+        assert!(result.is_ok());
+
+        let tokens = result.unwrap();
+        assert_eq!(tokens.len(), 3); // Hash, Identifier, EOF
+
+        if let TokenType::Identifier(name) = &tokens[1].token_type {
+            assert_eq!(name, "potion-descriptor");
+        } else {
+            panic!("Expected identifier token with hyphens");
+        }
+    }
 }

@@ -19,6 +19,14 @@ pub enum CollectionError {
 
     #[error("Generation error: {0}")]
     GenerationError(String),
+
+    #[error(
+        "Invalid table reference: Table '{table_id}' referenced in table '{referencing_table}' does not exist"
+    )]
+    InvalidTableReference {
+        table_id: String,
+        referencing_table: String,
+    },
 }
 
 /// Result type for collection operations
@@ -28,6 +36,7 @@ pub type CollectionResult<T> = Result<T, CollectionError>;
 pub type CollectionGenResult = CollectionResult<String>;
 
 /// A collection of tables that can generate random content
+#[derive(Debug)]
 pub struct Collection {
     tables: HashMap<String, Table>,
     distributions: HashMap<String, WeightedIndex<f64>>,
@@ -42,21 +51,28 @@ impl Collection {
         let mut tables = HashMap::new();
         let mut distributions = HashMap::new();
 
+        // First pass: collect all tables
         for table_node in program.tables {
             let table = table_node.value;
             let table_id = table.metadata.id.clone();
 
-            // Extract weights from rules
-            let weights: Vec<f64> = table.rules.iter().map(|rule| rule.value.weight).collect();
-
-            if weights.is_empty() {
+            if table.rules.is_empty() {
                 return Err(CollectionError::EmptyTable(table_id));
             }
+
+            tables.insert(table_id, table);
+        }
+
+        // Second pass: validate all table references
+        Self::validate_table_references(&tables)?;
+
+        // Third pass: create distributions
+        for (table_id, table) in &tables {
+            let weights: Vec<f64> = table.rules.iter().map(|rule| rule.value.weight).collect();
 
             let distribution = WeightedIndex::new(&weights)
                 .map_err(|e| CollectionError::GenerationError(format!("Invalid weights: {}", e)))?;
             distributions.insert(table_id.clone(), distribution);
-            tables.insert(table_id, table);
         }
 
         Ok(Self {
@@ -124,6 +140,28 @@ impl Collection {
         }
 
         Ok(result.trim().to_string())
+    }
+
+    /// Validate that all table references point to existing tables
+    fn validate_table_references(tables: &HashMap<String, Table>) -> CollectionResult<()> {
+        for (table_id, table) in tables {
+            for rule in &table.rules {
+                for content in &rule.value.content {
+                    if let RuleContent::Expression(Expression::TableReference {
+                        table_id: ref_id,
+                    }) = content
+                    {
+                        if !tables.contains_key(ref_id) {
+                            return Err(CollectionError::InvalidTableReference {
+                                table_id: ref_id.clone(),
+                                referencing_table: table_id.clone(),
+                            });
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 
     /// Check if a table exists in the collection
@@ -220,5 +258,88 @@ mod tests {
         } else {
             panic!("Expected TableNotFound error");
         }
+    }
+
+    #[test]
+    fn test_valid_table_references() {
+        let source = r#"#color
+1.0: red
+2.0: blue
+
+#shape
+1.0: circle
+2.0: square
+
+#item
+1.0: {#color} {#shape}"#;
+
+        let collection = Collection::new(source);
+        assert!(
+            collection.is_ok(),
+            "Valid table references should be accepted"
+        );
+    }
+
+    #[test]
+    fn test_invalid_table_reference() {
+        let source = r#"#color
+1.0: red
+2.0: blue
+
+#item
+1.0: {#nonexistent} shape"#;
+
+        let collection = Collection::new(source);
+        assert!(
+            collection.is_err(),
+            "Invalid table reference should cause error"
+        );
+
+        if let Err(CollectionError::InvalidTableReference {
+            table_id,
+            referencing_table,
+        }) = collection
+        {
+            assert_eq!(table_id, "nonexistent");
+            assert_eq!(referencing_table, "item");
+        } else {
+            panic!("Expected InvalidTableReference error");
+        }
+    }
+
+    #[test]
+    fn test_multiple_invalid_references() {
+        let source = r#"#color
+1.0: red
+
+#item
+1.0: {#missing1} {#missing2}"#;
+
+        let collection = Collection::new(source);
+        assert!(
+            collection.is_err(),
+            "Invalid table references should cause error"
+        );
+
+        // Should fail on the first invalid reference
+        if let Err(CollectionError::InvalidTableReference {
+            table_id,
+            referencing_table,
+        }) = collection
+        {
+            assert_eq!(table_id, "missing1");
+            assert_eq!(referencing_table, "item");
+        } else {
+            panic!("Expected InvalidTableReference error");
+        }
+    }
+
+    #[test]
+    fn test_self_reference() {
+        let source = r#"#color
+1.0: {#color} variant"#;
+
+        let collection = Collection::new(source);
+        assert!(collection.is_ok(), "Self-references should be valid");
     }
 }

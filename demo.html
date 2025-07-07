@@ -37,6 +37,7 @@
         white-space: pre-wrap;
         min-height: 200px;
         overflow-y: auto;
+        max-height: 400px;
       }
       button {
         background: #007acc;
@@ -195,9 +196,14 @@
         const source = document.getElementById("source").value;
         try {
           const isValid = WasmParser.validate(source);
+
+          // trigger validations
+          new WasmCollection(source);
+
           document.getElementById("output").textContent = isValid
             ? "Valid TBL syntax!"
             : "Invalid TBL syntax";
+
           document.getElementById("status").innerHTML = isValid
             ? `<div class="success">✓ Syntax is valid</div>`
             : `<div class="error">❌ Syntax is invalid</div>`;
