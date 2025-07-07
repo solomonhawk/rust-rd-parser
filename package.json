@@ -12,7 +12,9 @@
     "build:nodejs": "wasm-pack build --out-dir dist/pkg-node --target nodejs --features wasm",
     "build:bundler": "wasm-pack build --out-dir dist/pkg --target bundler --features wasm",
     "test": "wasm-pack test --chrome --features wasm-test",
-    "test:node": "wasm-pack test --node --features wasm-test"
+    "test:node": "wasm-pack test --node --features wasm-test",
+    "serve": "node serve.js",
+    "demo": "npm run serve"
   },
   "repository": {
     "type": "git",
