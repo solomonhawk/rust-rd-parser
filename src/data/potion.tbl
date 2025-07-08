@@ -1,5 +1,5 @@
-#potion
-1: {#potion-descriptor} {#color} {#potion-substance} {#containment} {#container-descriptor} {#container-shape} {#container-material} {#container-type}. It smells like {#smell} and {#potion-attribute}. {#potion-effect}
+#potion[export]
+1: {#potion-descriptor|indefinite|capitalize} {#color} {#potion-substance} {#containment} {#container-descriptor|indefinite} {#container-shape} {#container-material} {#container-type}. It smells like {#smell} and {#potion-attribute}. {#potion-effect}
 
 #containment
 1: contained within

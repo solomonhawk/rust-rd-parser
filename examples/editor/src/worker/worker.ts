@@ -5,6 +5,7 @@ import init, {
   WasmUtils,
   WasmCollection,
 } from "../../public/wasm/table_collection.js";
+import { provideTblCompletions } from "./language-server";
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 declare const self: DedicatedWorkerGlobalScope;
@@ -215,4 +216,15 @@ export async function getVersion(): Promise<string> {
 export async function getExampleSource(): Promise<string> {
   await init();
   return WasmUtils.example_source();
+}
+
+export async function getCompletions(
+  lineUpToCursor: string,
+  fullText: string,
+  position: {
+    lineNumber: number;
+    column: number;
+  }
+) {
+  return provideTblCompletions(lineUpToCursor, fullText, position);
 }
